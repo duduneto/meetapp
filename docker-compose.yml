@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: varjotapp
+      POSTGRES_USER: varjotapp
+      POSTGRES_PASSWORD: varjotapp
+    ports:
+      - "5433:5432"
+    volumes:
+      - varjotapp-postgres:/var/lib/postgresql/data
+
+volumes:
+  varjotapp-postgres:

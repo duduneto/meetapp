@@ -1,0 +1,66 @@
+{
+  "year": 2026,
+  "ref": "0_2026_9_41",
+  "month": 9,
+  "startAt": "2026-10-05T03:00:00.000Z",
+  "meeting_week_ref": 0,
+  "endAt": "2026-10-11T03:00:00.000Z",
+  "yearWeek": 41,
+  "bibleReading": "JEREMIAS 40-41",
+  "songs": {
+    "initial": "Cântico 33",
+    "transitional": "Cântico 17",
+    "last": "Cântico 38"
+  },
+  "treasures": {
+    "title": "TESOUROS DA PALAVRA DE DEUS",
+    "sections": [
+      {
+        "title": "1. Tenha o ponto de vista correto sobre a proteção de Jeová",
+        "assigned_to": []
+      },
+      {
+        "title": "2. Joias espirituais",
+        "assigned_to": []
+      },
+      {
+        "title": "3. Leitura da Bíblia",
+        "assigned_to": []
+      }
+    ]
+  },
+  "ministery": {
+    "title": "FAÇA SEU MELHOR NO MINISTÉRIO",
+    "sections": [
+      {
+        "title": "4. Iniciando conversas",
+        "assigned_to": []
+      },
+      {
+        "title": "5. Iniciando conversas",
+        "assigned_to": []
+      },
+      {
+        "title": "6. Iniciando conversas",
+        "assigned_to": []
+      },
+      {
+        "title": "7. Explicando suas crenças",
+        "assigned_to": []
+      }
+    ]
+  },
+  "christianLife": {
+    "title": "NOSSA VIDA CRISTÃ",
+    "sections": [
+      {
+        "title": "8. Jeová é o Protetor das viúvas",
+        "assigned_to": []
+      },
+      {
+        "title": "9. Estudo bíblico de congregação",
+        "assigned_to": []
+      }
+    ]
+  }
+}

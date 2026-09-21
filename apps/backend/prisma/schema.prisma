@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Congregation {
+  id           String                @id @default(cuid())
+  name         String
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  settings     CongregationSettings?
+  users        User[]
+  participants Participant[]
+  meetingWeeks MeetingWeek[]
+  auditLogs    AuditLog[]
+}
+
+model CongregationSettings {
+  id                         String       @id @default(cuid())
+  congregationId             String       @unique
+  timezone                   String       @default("America/Fortaleza")
+  midweekDefaultWeekday      Int          @default(3)
+  weekendDefaultWeekday      Int          @default(6)
+  anonymousReadTokenHash     String
+  anonymousReadTokenCreatedAt DateTime    @default(now())
+  scriptApiKeyHash           String
+  scriptApiKeyCreatedAt      DateTime     @default(now())
+  createdAt                  DateTime     @default(now())
+  updatedAt                  DateTime     @updatedAt
+  congregation               Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id             String       @id @default(cuid())
+  congregationId String
+  email          String
+  name           String
+  role           String
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  congregation   Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  auditLogs      AuditLog[]
+
+  @@unique([congregationId, email])
+  @@index([email])
+}
+
+model Participant {
+  id             String       @id @default(cuid())
+  congregationId String
+  name           String
+  gender         String?
+  phone          String?
+  whatsapp       String?
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  congregation   Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  assignments    Assignment[]
+
+  @@index([congregationId, deletedAt])
+}
+
+model MeetingWeek {
+  id               String       @id @default(cuid())
+  congregationId   String
+  ref              String
+  year             Int
+  month            Int
+  yearWeek         Int
+  startAt          DateTime
+  endAt            DateTime
+  bibleReading     String?
+  rawSourcePayload Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  congregation     Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  meetings         Meeting[]
+
+  @@unique([congregationId, ref])
+  @@unique([congregationId, year, yearWeek])
+  @@index([congregationId, startAt])
+}
+
+model Meeting {
+  id                          String           @id @default(cuid())
+  meetingWeekId               String
+  type                        String
+  meetingDate                 DateTime?
+  publicTalkTheme             String?
+  publicSpeakerName           String?
+  publicSpeakerCongregation   String?
+  createdAt                   DateTime         @default(now())
+  updatedAt                   DateTime         @updatedAt
+  meetingWeek                 MeetingWeek      @relation(fields: [meetingWeekId], references: [id], onDelete: Cascade)
+  sections                    MeetingSection[]
+
+  @@unique([meetingWeekId, type])
+}
+
+model MeetingSection {
+  id        String        @id @default(cuid())
+  meetingId String
+  sectionKey String
+  title     String
+  order     Int
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  meeting   Meeting       @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  parts     MeetingPart[]
+
+  @@unique([meetingId, sectionKey])
+  @@index([meetingId, order])
+}
+
+model MeetingPart {
+  id               String            @id @default(cuid())
+  meetingSectionId String
+  partKey          String
+  title            String
+  order            Int
+  assignable       Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  meetingSection   MeetingSection    @relation(fields: [meetingSectionId], references: [id], onDelete: Cascade)
+  slots            MeetingPartSlot[]
+
+  @@unique([meetingSectionId, partKey])
+  @@index([meetingSectionId, order])
+}
+
+model MeetingPartSlot {
+  id            String      @id @default(cuid())
+  meetingPartId String
+  position      Int
+  label         String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  meetingPart   MeetingPart @relation(fields: [meetingPartId], references: [id], onDelete: Cascade)
+  assignment    Assignment?
+
+  @@unique([meetingPartId, position])
+}
+
+model Assignment {
+  id                String          @id @default(cuid())
+  meetingPartSlotId String          @unique
+  participantId     String
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  meetingPartSlot   MeetingPartSlot @relation(fields: [meetingPartSlotId], references: [id], onDelete: Cascade)
+  participant       Participant     @relation(fields: [participantId], references: [id])
+}
+
+model AuditLog {
+  id              String       @id @default(cuid())
+  congregationId  String
+  changedByUserId String
+  changedAt       DateTime     @default(now())
+  entityType      String
+  entityId        String
+  field           String
+  previousValue   String?
+  newValue        String?
+  congregation    Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  changedByUser   User         @relation(fields: [changedByUserId], references: [id])
+
+  @@index([congregationId, changedAt])
+  @@index([entityType, entityId])
+}
