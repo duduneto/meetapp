@@ -23,7 +23,37 @@ Se for executar muitos comandos, vale propor instalar uma chave SSH — mas isso
 
 Cada passo abaixo tem uma armadilha associada. Elas estão detalhadas em `references/armadilhas.md` — vale ler antes de começar, porque várias só aparecem depois que o estrago está feito.
 
-### 1. Clone
+### 0. Redeploy? Pule para o fluxo curto
+
+Se `/root/meetapp` já existe, isto é uma atualização, não um deploy novo. O fluxo é:
+
+```bash
+scripts/verify_deploy.sh --baseline          # ANTES de tudo
+cd /root/meetapp
+cp -p apps/backend/.env /root/varjotapp.env.bak.$(date +%Y%m%d-%H%M%S)
+GIT_TERMINAL_PROMPT=0 git fetch https://<user>:<token>@github.com/duduneto/meetapp.git main
+git log --oneline HEAD..FETCH_HEAD          # o que vem
+git diff --stat HEAD FETCH_HEAD             # o que muda
+```
+
+O `origin` está sem token (por segurança), então `git pull` sozinho falha em repo privado — autentique no `fetch` e depois `git merge --ff-only FETCH_HEAD`.
+
+Decida pelo diff o que realmente precisa rodar:
+
+| Mudou | Ação |
+|---|---|
+| `apps/backend/prisma/` | `npx prisma migrate deploy` |
+| `package.json` / `package-lock.json` | `npm ci --workspace apps/backend --include-workspace-root=false` |
+| qualquer `.ts` | `npm run build` |
+| sempre | `pm2 restart varjotapp-api --update-env` + `scripts/verify_deploy.sh` |
+
+Rodar `migrate deploy` mesmo sem mudança em `prisma/` é seguro e barato — responde "No pending migrations to apply". Vale como confirmação explícita quando o usuário pergunta se há migrations.
+
+O `.env` é gitignored e sobrevive ao merge, mas faça o backup mesmo assim e confirme depois que `NODE_ENV=production` continua lá.
+
+**O `.env` do servidor pode ter sido editado por outra pessoa entre um deploy e outro.** Confira os valores reais em vez de assumir os do deploy anterior — `pm2 logs` mostra os boots e denuncia reinícios que não foram seus.
+
+### 1. Clone (deploy novo)
 
 ```bash
 cd /root
@@ -44,9 +74,9 @@ npm ci --workspace apps/backend --include-workspace-root=false
 
 O lockfile fica na **raiz**, não em `apps/backend`. Rodar `npm install` de dentro de `apps/backend` faz o npm subir até a raiz do workspace e instalar o frontend junto. O flag `--workspace` é o que mantém o escopo no backend.
 
-O `node_modules` resultante fica **hoisted em `/root/meetapp/node_modules`**, não dentro de `apps/backend`. Isso é esperado e o backend enxerga tudo. Se alguém pedir o `node_modules` fisicamente dentro de `apps/backend`, é outra conversa — confirme antes de reestruturar.
+O `node_modules` fica **majoritariamente hoisted em `/root/meetapp/node_modules`**, não dentro de `apps/backend`. O hoisting é best-effort: quando há conflito de versão com uma dependência transitiva, o npm instala localmente em `apps/backend/node_modules/`. Foi o caso de `cheerio` e `htmlparser2`. Ou seja, um pacote pode estar instalado e correto sem aparecer na raiz.
 
-Confirme o escopo checando que `node_modules/react` **não** existe.
+Verifique o escopo por `node_modules/react` **não** existir, e a presença de um pacote por `npm ls <pkg> --workspace apps/backend` — nunca por `ls node_modules/<pkg>`, que dá falso negativo (veja armadilha nº 7).
 
 ### 3. `.env`
 

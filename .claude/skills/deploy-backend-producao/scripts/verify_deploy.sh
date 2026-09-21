@@ -16,6 +16,12 @@ DOMAIN="${DOMAIN:-https://srv1088997.hstgr.cloud}"
 PREFIX="${PREFIX:-/varjotapp}"
 DIRECT="${DIRECT:-http://72.61.32.122:3999}"
 
+# Precisa bater com FRONTEND_ORIGIN do .env no servidor. Se divergir, o teste de
+# CORS acusa falha sem haver problema algum — foi o que aconteceu quando o projeto
+# migrou de ze-cong para varjotapp. Confira antes de tratar como regressao:
+#   grep ^FRONTEND_ORIGIN /root/meetapp/apps/backend/.env
+FRONT_ORIGIN="${FRONT_ORIGIN:-https://varjotapp.web.app}"
+
 fail=0
 
 code() { curl -s -o /dev/null -m 10 -w '%{http_code}' "$1" 2>/dev/null || echo "ERR"; }
@@ -66,9 +72,9 @@ else
 fi
 
 echo
-echo "== CORS =="
+echo "== CORS (origin esperado: $FRONT_ORIGIN) =="
 origin_ok=$(curl -s -i -m 10 "$DOMAIN$PREFIX/health" \
-  -H 'Origin: https://ze-cong.web.app' 2>/dev/null | grep -ci 'access-control-allow-origin')
+  -H "Origin: $FRONT_ORIGIN" 2>/dev/null | grep -ci 'access-control-allow-origin')
 origin_bad=$(curl -s -i -m 10 "$DOMAIN$PREFIX/health" \
   -H 'Origin: https://evil.example.com' 2>/dev/null | grep -ci 'access-control-allow-origin')
 

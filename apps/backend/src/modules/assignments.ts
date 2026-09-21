@@ -460,6 +460,67 @@ assignmentsRouter.post(
   }
 );
 
+function publicAssignmentsAppUrl() {
+  return (
+    process.env.PUBLIC_APP_URL ??
+    `${process.env.FRONTEND_ORIGIN?.split(",")[0] ?? "http://localhost:5173"}/public`
+  );
+}
+
+async function findActiveDefaultPublicToken(congregationId: string, now = new Date()) {
+  return prisma.publicAccessToken.findFirst({
+    where: {
+      congregationId,
+      isDefault: true,
+      revokedAt: null,
+      expiresAt: { gt: now }
+    }
+  });
+}
+
+assignmentsRouter.post("/assignments/public-link", requireAuth, requireAdmin, async (req, res) => {
+  const publicToken = await findActiveDefaultPublicToken(req.user!.congregationId);
+  if (!publicToken) {
+    return res.status(409).json({
+      message: "Defina um token publico padrao e ativo em Configuracoes antes de compartilhar."
+    });
+  }
+
+  const token = signPublicAccessToken({
+    tokenId: publicToken.id,
+    congregationId: req.user!.congregationId,
+    expiresAt: publicToken.expiresAt
+  });
+  const link = new URL(publicAssignmentsAppUrl());
+  link.searchParams.set("token", token);
+
+  await prisma.auditLog.create({
+    data: {
+      congregationId: req.user!.congregationId,
+      meetingId: null,
+      changedByUserId: req.user!.id,
+      actorType: "USER",
+      action: "PUBLIC_ASSIGNMENTS_LINK_SHARED",
+      entityType: "PublicAccessToken",
+      entityId: publicToken.id,
+      field: "publicLink",
+      previousValue: null,
+      newValue: null,
+      context: {
+        tokenName: publicToken.name,
+        tokenExpiresAt: publicToken.expiresAt.toISOString(),
+        scope: "catalog"
+      }
+    }
+  });
+
+  res.json({
+    link: link.toString(),
+    expiresAt: publicToken.expiresAt,
+    publicToken: { id: publicToken.id, name: publicToken.name }
+  });
+});
+
 assignmentsRouter.post(
   "/assignments/:year/:week/:type/public-link",
   requireAuth,
@@ -484,14 +545,7 @@ assignmentsRouter.post(
         },
         include: { meetings: { where: { type: route.type }, select: { id: true } } }
       }),
-      prisma.publicAccessToken.findFirst({
-        where: {
-          congregationId: req.user!.congregationId,
-          isDefault: true,
-          revokedAt: null,
-          expiresAt: { gt: now }
-        }
-      })
+      findActiveDefaultPublicToken(req.user!.congregationId, now)
     ]);
 
     if (!meetingWeek || meetingWeek.meetings.length === 0) {
@@ -508,10 +562,7 @@ assignmentsRouter.post(
       congregationId: req.user!.congregationId,
       expiresAt: publicToken.expiresAt
     });
-    const configuredUrl =
-      process.env.PUBLIC_APP_URL ??
-      `${process.env.FRONTEND_ORIGIN?.split(",")[0] ?? "http://localhost:5173"}/public`;
-    const link = new URL(configuredUrl);
+    const link = new URL(publicAssignmentsAppUrl());
     link.searchParams.set("token", token);
     link.searchParams.set("year", String(meetingWeek.year));
     link.searchParams.set("month", String(meetingWeek.month));
