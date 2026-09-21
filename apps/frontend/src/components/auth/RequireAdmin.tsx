@@ -20,7 +20,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!firebaseUser && !devBypass) {
+  if ((!firebaseUser && !devBypass) || (devBypass && !session && !error)) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 

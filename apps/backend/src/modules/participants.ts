@@ -15,14 +15,16 @@ const participantSchema = z.object({
 const bulkParticipantSchema = z
   .object({
     name: z.string().trim().min(1),
-    phone: z.string().trim().min(1)
+    phone: z.string().trim().min(1),
+    gender: z.enum(["Masculino", "Feminino"]).nullable().optional(),
+    whatsapp: z.string().trim().min(1).optional()
   })
   .strict()
-  .transform(({ name, phone }) => ({
+  .transform(({ name, phone, gender, whatsapp }) => ({
     name: name.replace(/\s+/g, " "),
-    gender: null,
+    gender: gender ?? null,
     phone,
-    whatsapp: phone
+    whatsapp: whatsapp ?? phone
   }));
 
 export const bulkParticipantsSchema = z.array(bulkParticipantSchema).min(1).max(500);

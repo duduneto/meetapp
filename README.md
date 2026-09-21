@@ -48,7 +48,23 @@ Links publicos de reunioes tambem usam JWT HS256, gerenciados em **Settings > Li
 
 ## Importar uma reuniao de meio de semana
 
-O backend aceita o JSON legado pelo endpoint autenticado:
+Na tela **Designacoes**, um administrador pode clicar em **Add Semana** e informar a URL HTTPS de uma pagina da apostila em `jw.org`. O backend baixa o HTML, extrai a programacao com Cheerio e cria a semana completa em uma unica transacao. URLs externas ao dominio `jw.org` sao rejeitadas, e uma semana existente com a mesma `ref` ou combinacao de ano/semana retorna HTTP `409`.
+
+O mesmo fluxo pode ser chamado com um ID Token administrativo:
+
+```bash
+curl --request POST http://localhost:3333/script/import-midweek \
+  --header "Authorization: Bearer FIREBASE_ID_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data '{"url":"https://www.jw.org/pt/biblioteca/jw-apostila-do-mes/setembro-outubro-2026-mwb/"}'
+```
+
+A URL pode apontar para uma semana ou para uma apostila completa. Para uma apostila,
+o backend encontra até 12 semanas e processa duas por vez. A resposta informa cada
+semana como `created`, `skipped` (já existente) ou `failed`; uma falha não desfaz as
+outras semanas criadas com sucesso.
+
+O endpoint continua aceitando o JSON legado para automacoes autenticadas com API key:
 
 ```bash
 curl --request POST http://localhost:3333/script/import-midweek \
@@ -57,7 +73,7 @@ curl --request POST http://localhost:3333/script/import-midweek \
   --data-binary @apps/jw_scrapper/example-payload.json
 ```
 
-A API key tecnica e criada pelo seed ou pode ser regenerada em Settings. A importacao cria a semana, as reunioes de meio e fim de semana e todas as partes designaveis. Uma `ref` ja importada retorna HTTP `409` e nao altera designacoes existentes.
+A API key tecnica e criada pelo seed ou pode ser regenerada em Settings. A importacao cria a semana, as reunioes de meio e fim de semana e todas as partes designaveis.
 
 Para importar diretamente da pagina da apostila no WOL, execute `apps/jw_scrapper/script.js` no console do navegador. O script solicita a URL da API e a API key, extrai a reuniao atual e envia o mesmo `POST`. O backend deve incluir a origem do WOL em `SCRIPT_IMPORT_ORIGINS`.
 

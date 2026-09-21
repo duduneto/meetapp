@@ -1,0 +1,22 @@
+[debug] [2026-09-21T06:19:05.425Z] ----------------------------------------------------------------------
+[debug] [2026-09-21T06:19:05.426Z] Command:       /Users/duduneto/.nvm/versions/node/v22.22.0/bin/node /Users/duduneto/.nvm/versions/node/v22.22.0/bin/firebase init
+[debug] [2026-09-21T06:19:05.426Z] CLI Version:   15.10.1
+[debug] [2026-09-21T06:19:05.426Z] Platform:      darwin
+[debug] [2026-09-21T06:19:05.426Z] Node Version:  v22.22.0
+[debug] [2026-09-21T06:19:05.426Z] Time:          Mon Sep 21 2026 03:19:05 GMT-0300 (Horário Padrão de Brasília)
+[debug] [2026-09-21T06:19:05.426Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-09-21T06:19:05.427Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  /Users/duduneto/Dev/varjota/varjotapp
+
+[debug] [2026-09-21T06:19:06.438Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-09-21T06:19:06.438Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}

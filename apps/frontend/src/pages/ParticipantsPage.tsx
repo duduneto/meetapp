@@ -4,6 +4,7 @@ import type { Participant } from "../api/types";
 import { Button } from "../components/Button";
 import { InputText } from "../components/InputText";
 import { ParticipantAssignmentsTable } from "../components/participants/ParticipantAssignmentsTable";
+import { BulkParticipantsPopover } from "../components/participants/BulkParticipantsPopover";
 import { ParticipantEditSheet } from "../components/participants/ParticipantEditSheet";
 import { Select } from "../components/Select";
 
@@ -45,16 +46,23 @@ export function ParticipantsPage() {
 
   return (
     <section>
-      <div className="mb-4 flex justify-end">
-        <div className="segmented">
-          <Button variant={!deleted ? "selected" : "secondary"} onClick={() => { setDeleted(false); setSelectedParticipant(null); }}>
-            Ativos
-          </Button>
-          <Button variant={deleted ? "selected" : "secondary"} onClick={() => { setDeleted(true); setSelectedParticipant(null); }}>
-            Excluidos
-          </Button>
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-heading text-xl font-semibold">Participantes</h1>
+          <p className="text-sm text-muted-foreground">Gerencie os participantes e suas designações.</p>
         </div>
-      </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {!deleted && <BulkParticipantsPopover onImported={async () => load()} />}
+          <div className="segmented">
+            <Button variant={!deleted ? "selected" : "secondary"} onClick={() => { setDeleted(false); setSelectedParticipant(null); }}>
+              Ativos
+            </Button>
+            <Button variant={deleted ? "selected" : "secondary"} onClick={() => { setDeleted(true); setSelectedParticipant(null); }}>
+              Excluidos
+            </Button>
+          </div>
+        </div>
+      </header>
       {!deleted && (
         <div className="form-row">
           <InputText placeholder="Nome" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />

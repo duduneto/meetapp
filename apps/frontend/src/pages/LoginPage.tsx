@@ -64,13 +64,15 @@ export function LoginPage() {
           <CardContent className="space-y-3">
             <Button
               className="w-full"
-              disabled={!configured || submitting || loading}
+              disabled={(!configured && !devBypass) || submitting || loading}
               onClick={() => void login()}
             >
               <LogIn />
-              {submitting ? "Abrindo Google..." : "Entrar com Google"}
+              {submitting
+                ? devBypass ? "Entrando..." : "Abrindo Google..."
+                : devBypass ? "Entrar em desenvolvimento" : "Entrar com Google"}
             </Button>
-            {!configured && (
+            {!configured && !devBypass && (
               <p className="text-sm text-destructive">
                 A configuração pública do Firebase não foi encontrada.
               </p>

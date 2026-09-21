@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Briefcase, Mic } from "lucide-react";
 import { api } from "../api/client";
 import { formatDateRange } from "../hooks";
@@ -12,6 +12,10 @@ import {
 } from "@/components/TemporalNavigationDrawer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AddWeekPopover,
+  type ImportedMeetingWeek,
+} from "@/components/assignments/AddWeekPopover";
 
 type Month = TemporalMonth & { weekCount: number };
 type Week = { year: number; yearWeek: number; startAt: string; endAt: string; hasMidweek: boolean; hasWeekend: boolean };
@@ -34,9 +38,15 @@ export function AssignmentsIndexPage() {
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [selectedMeeting, setSelectedMeeting] = useState<SelectedMeeting | null>(null);
 
-  useEffect(() => {
-    api<{ months: Month[] }>("/assignment-months").then((data) => setMonths(data.months));
+  const loadMonths = useCallback(async () => {
+    const data = await api<{ months: Month[] }>("/assignment-months");
+    setMonths(data.months);
+    return data.months;
   }, []);
+
+  useEffect(() => {
+    void loadMonths();
+  }, [loadMonths]);
 
   useEffect(() => {
     if (!selected) return;
@@ -44,8 +54,30 @@ export function AssignmentsIndexPage() {
     api<{ weeks: Week[] }>(`/assignment-months/${selected.year}/${selected.month}/weeks`).then((data) => setWeeks(data.weeks));
   }, [selected]);
 
+  async function handleImported(importedWeeks: ImportedMeetingWeek[]) {
+    const nextMonths = await loadMonths();
+    const week = importedWeeks.at(-1);
+    if (!week) return;
+    const importedMonth = nextMonths.find(
+      (month) => month.year === week.year && month.month === week.month,
+    ) ?? { year: week.year, month: week.month };
+    setSelected(importedMonth);
+    setSelectedMeeting(null);
+    const data = await api<{ weeks: Week[] }>(
+      `/assignment-months/${week.year}/${week.month}/weeks`,
+    );
+    setWeeks(data.weeks);
+  }
+
   return (
     <section className="flex h-full min-h-0 flex-col">
+      <header className="mb-4 flex shrink-0 items-center justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-xl font-semibold">Designações</h1>
+          <p className="text-sm text-muted-foreground">Gerencie as semanas e reuniões.</p>
+        </div>
+        <AddWeekPopover onImported={handleImported} />
+      </header>
       <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto">
         <TemporalNavigationDrawer
           months={months}

@@ -29,16 +29,30 @@ type AdminAuthContextValue = {
 };
 
 const AdminAuthContext = createContext<AdminAuthContextValue | null>(null);
+const DEV_SIGNED_OUT_KEY = "varjotapp.dev-auth-signed-out";
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [devSignedOut, setDevSignedOut] = useState(
+    () => isDevAuthBypass && sessionStorage.getItem(DEV_SIGNED_OUT_KEY) === "true",
+  );
 
   useEffect(() => {
     if (isDevAuthBypass) {
+      if (devSignedOut) {
+        setFirebaseUser(null);
+        setSession(null);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+
       let active = true;
+      setLoading(true);
+      setError(null);
       api<Session>("/me")
         .then((value) => {
           if (active) setSession(value);
@@ -88,7 +102,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     });
-  }, []);
+  }, [devSignedOut]);
 
   const value = useMemo<AdminAuthContextValue>(
     () => ({
@@ -99,7 +113,11 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       configured: isFirebaseConfigured,
       devBypass: isDevAuthBypass,
       loginWithGoogle: async () => {
-        if (isDevAuthBypass) return;
+        if (isDevAuthBypass) {
+          sessionStorage.removeItem(DEV_SIGNED_OUT_KEY);
+          setDevSignedOut(false);
+          return;
+        }
         if (!auth) throw new Error("A autenticação Firebase não está configurada.");
         setError(null);
         const provider = new GoogleAuthProvider();
@@ -107,8 +125,18 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         await signInWithPopup(auth, provider);
       },
       logout: async () => {
-        if (isDevAuthBypass) return;
-        if (auth) await signOut(auth);
+        setError(null);
+        if (isDevAuthBypass) {
+          sessionStorage.setItem(DEV_SIGNED_OUT_KEY, "true");
+          setSession(null);
+          setFirebaseUser(null);
+          setDevSignedOut(true);
+          return;
+        }
+        if (auth) {
+          await signOut(auth);
+          setSession(null);
+        }
       },
     }),
     [error, firebaseUser, loading, session],
