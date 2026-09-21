@@ -13,6 +13,12 @@ enum AssignmentResponseStatus {
   REJECTED
 }
 
+enum ParticipationNotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 model Congregation {
   id           String                @id @default(cuid())
   name         String
@@ -54,6 +60,7 @@ model User {
   congregation   Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
   auditLogs      AuditLog[]
   createdPublicAccessTokens PublicAccessToken[] @relation("PublicAccessTokenCreatedBy")
+  participationNotifications ParticipationNotification[]
 
   @@unique([congregationId, email])
   @@index([email])
@@ -183,10 +190,34 @@ model Assignment {
   respondedAt                DateTime?
   participationTokenVersion  Int                      @default(0)
   participationTokenIssuedAt DateTime?
+  participationAccessCodeHash String?                 @unique
   createdAt                  DateTime                 @default(now())
   updatedAt                  DateTime                 @updatedAt
   meetingPartSlot            MeetingPartSlot          @relation(fields: [meetingPartSlotId], references: [id], onDelete: Cascade)
   participant                Participant              @relation(fields: [participantId], references: [id])
+  participationNotifications ParticipationNotification[]
+}
+
+model ParticipationNotification {
+  id                String                          @id @default(cuid())
+  assignmentId      String
+  createdByUserId   String?
+  batchId           String
+  tokenVersion      Int
+  recipientWhatsapp String
+  status            ParticipationNotificationStatus @default(PENDING)
+  error             String?
+  providerMessageId String?
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+  sentAt            DateTime?
+  assignment        Assignment                      @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  createdByUser     User?                           @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([assignmentId, tokenVersion])
+  @@index([batchId])
+  @@index([assignmentId, createdAt])
+  @@index([status, createdAt])
 }
 
 model AuditLog {

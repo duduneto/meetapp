@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import jwt, { type JwtPayload } from "jsonwebtoken";
 import {
   signParticipationToken,
   verifyParticipationToken
@@ -21,6 +22,8 @@ test("signs and validates an assignment participation JWT", () => {
       participantId: "participant-1",
       version: 4
     });
+    const decoded = jwt.decode(token) as JwtPayload;
+    assert.equal(decoded.exp! - decoded.iat!, 3600);
     assert.equal(verifyParticipationToken(`${token}invalid`), null);
   } finally {
     if (previousSecret === undefined) delete process.env.PARTICIPATION_JWT_SECRET;

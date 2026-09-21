@@ -40,7 +40,8 @@ export function signParticipationToken(claims: ParticipationTokenClaims) {
       issuer: ISSUER,
       audience: AUDIENCE,
       subject: claims.assignmentId,
-      jwtid: crypto.randomUUID()
+      jwtid: crypto.randomUUID(),
+      expiresIn: "1h"
     }
   );
 }

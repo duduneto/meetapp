@@ -48,6 +48,7 @@ export type ParticipantAssignmentsPage = {
 
 export type AssignmentSuggestionRole = "publisher" | "assistant";
 export type AssignmentResponseStatus = "PENDING" | "CONFIRMED" | "REJECTED";
+export type ParticipationNotificationStatus = "PENDING" | "SENT" | "FAILED";
 
 export type ParticipantSuggestion = {
   participantId: string;
@@ -81,7 +82,13 @@ export type ParticipationPayload = {
     section: { key: string; title: string };
     part: { key: string; title: string };
     slot: { position: number; label: string };
+    companions: Array<{
+      position: number;
+      label: string;
+      participant: { id: string; name: string } | null;
+    }>;
   };
+  publicMeetingLink: string | null;
 };
 
 export type MeetingActivity = {
@@ -137,7 +144,14 @@ export type AssignmentPayload = {
           assignmentId: string | null;
           responseStatus: AssignmentResponseStatus | null;
           respondedAt: string | null;
-          participant: { id: string; name: string; deletedAt?: string | null } | null;
+          participationNotificationStatus: ParticipationNotificationStatus | null;
+          participationNotificationSentAt: string | null;
+          participant: {
+            id: string;
+            name: string;
+            deletedAt?: string | null;
+            hasWhatsapp: boolean;
+          } | null;
         }>;
       }>;
     }>;

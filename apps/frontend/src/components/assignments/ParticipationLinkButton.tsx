@@ -15,7 +15,7 @@ export function ParticipationLinkButton({ assignmentId }: { assignmentId: string
     setCopied(false);
     setError(null);
     try {
-      const result = await api<{ link: string; token: string }>(
+      const result = await api<{ link: string; code: string }>(
         `/assignments/${assignmentId}/participation-link`,
         { method: "POST" },
       );

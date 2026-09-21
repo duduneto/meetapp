@@ -42,7 +42,9 @@ O bypass depende tambem de `import.meta.env.DEV`, entao ele e eliminado em qualq
 
 Para o primeiro administrador, defina `SEED_ADMIN_EMAIL` e `SEED_ADMIN_FIREBASE_UID` antes de executar o seed, ou atualize o registro existente diretamente no banco. Contas sem o vinculo de UID nao conseguem acessar `/app`.
 
-Links de confirmacao de participacao usam JWT HS256. Configure `PARTICIPATION_JWT_SECRET` com um segredo aleatorio de pelo menos 32 caracteres e `PARTICIPATION_APP_URL` com a URL publica da tela de confirmacao.
+Links de confirmacao de participacao usam um codigo publico curto, armazenado somente como hash no banco. Ao abrir o link, o frontend troca esse codigo por um JWT HS256 temporario de uma hora. Configure `PARTICIPATION_JWT_SECRET` com um segredo aleatorio de pelo menos 32 caracteres e `PARTICIPATION_APP_URL` com a URL publica base da tela de confirmacao (por exemplo, `https://varjotapp.com/participation`). Links JWT antigos continuam validos enquanto a respectiva designacao e versao permanecerem ativas.
+
+O botao **Enviar confirmacoes** da secao **Faca Seu Melhor no Ministerio** usa o gateway local em `WHATSAPP_API_URL` (por padrao `http://127.0.0.1:3999`). Configure `WHATSAPP_API_TOKEN` com o mesmo segredo usado pelo projeto `zap/`. O backend gera os links e as mensagens; o frontend nao recebe numeros de WhatsApp. Envios bem-sucedidos nao sao repetidos pelo fluxo normal, enquanto falhas podem ser tentadas novamente. `WHATSAPP_API_TIMEOUT_MS` deve comportar o intervalo sequencial entre todas as mensagens do lote.
 
 Links publicos de reunioes tambem usam JWT HS256, gerenciados em **Settings > Links publicos**. Configure `PUBLIC_SHARE_JWT_SECRET` com outro segredo aleatorio de pelo menos 32 caracteres e `PUBLIC_APP_URL` com a URL da rota publica (por exemplo, `https://varjotapp.com/public`). O administrador pode definir a expiracao, escolher o token padrao e revogar tokens; uma revogacao invalida imediatamente todos os links emitidos por aquele token.
 
@@ -98,5 +100,5 @@ A resposta HTTP `201` contem `createdCount` e a lista de participantes criados.
 - `npm run dev`: sobe backend e frontend.
 - `npm run build --workspaces`: compila backend e frontend.
 - `npm run typecheck --workspaces`: checa TypeScript.
-- `npm test`: testa a normalizacao do payload de importacao.
+- `npm test`: executa os testes automatizados do backend.
 - `npm run seed`: cria congregacao, settings, admin e participantes iniciais.

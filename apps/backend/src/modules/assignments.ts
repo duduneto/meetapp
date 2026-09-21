@@ -2,8 +2,16 @@ import { Prisma } from "@prisma/client";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { permissionsFor, requireAdmin, requireAuth, requireWrite } from "../auth/middleware.js";
-import { signParticipationToken } from "../auth/participationJwt.js";
+import {
+  generateParticipationAccessCode,
+  hashParticipationAccessCode
+} from "../auth/participationAccessCode.js";
+import { participationLinkFromCode } from "../lib/participationLinks.js";
 import { signPublicAccessToken } from "../auth/publicAccessJwt.js";
+import {
+  findActiveDefaultPublicToken,
+  publicAssignmentsAppUrl
+} from "../lib/publicLinks.js";
 import { prisma } from "../lib/prisma.js";
 
 export const assignmentsRouter = Router();
@@ -62,7 +70,17 @@ export async function buildAssignmentPayload(
                 include: {
                   slots: {
                     orderBy: { position: "asc" },
-                    include: { assignment: { include: { participant: true } } }
+                    include: {
+                      assignment: {
+                        include: {
+                          participant: true,
+                          participationNotifications: {
+                            orderBy: { createdAt: "desc" },
+                            take: 1
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -101,21 +119,31 @@ export async function buildAssignmentPayload(
           partKey: part.partKey,
           title: part.title,
           assignable: part.assignable,
-          slots: part.slots.map((slot) => ({
-            id: slot.id,
-            position: slot.position,
-            label: slot.label,
-            assignmentId: slot.assignment?.id ?? null,
-            responseStatus: slot.assignment?.responseStatus ?? null,
-            respondedAt: slot.assignment?.respondedAt ?? null,
-            participant: slot.assignment?.participant
-              ? {
-                  id: slot.assignment.participant.id,
-                  name: slot.assignment.participant.name,
-                  deletedAt: slot.assignment.participant.deletedAt
-                }
-              : null
-          }))
+          slots: part.slots.map((slot) => {
+            const latestNotification = slot.assignment?.participationNotifications[0];
+            const currentNotification =
+              latestNotification?.tokenVersion === slot.assignment?.participationTokenVersion
+                ? latestNotification
+                : null;
+            return {
+              id: slot.id,
+              position: slot.position,
+              label: slot.label,
+              assignmentId: slot.assignment?.id ?? null,
+              responseStatus: slot.assignment?.responseStatus ?? null,
+              respondedAt: slot.assignment?.respondedAt ?? null,
+              participationNotificationStatus: currentNotification?.status ?? null,
+              participationNotificationSentAt: currentNotification?.sentAt ?? null,
+              participant: slot.assignment?.participant
+                ? {
+                    id: slot.assignment.participant.id,
+                    name: slot.assignment.participant.name,
+                    deletedAt: slot.assignment.participant.deletedAt,
+                    hasWhatsapp: Boolean(slot.assignment.participant.whatsapp?.trim())
+                  }
+                : null
+            };
+          })
         }))
       }))
     },
@@ -370,6 +398,7 @@ assignmentsRouter.post(
   requireAuth,
   requireWrite,
   async (req, res) => {
+    const accessCode = generateParticipationAccessCode();
     const result = await prisma.$transaction(async (tx) => {
       const assignment = await tx.assignment.findFirst({
         where: {
@@ -410,18 +439,13 @@ assignmentsRouter.post(
         where: { id: assignment.id },
         data: {
           participationTokenVersion: { increment: 1 },
-          participationTokenIssuedAt: new Date()
+          participationTokenIssuedAt: new Date(),
+          participationAccessCodeHash: hashParticipationAccessCode(accessCode)
         }
       });
       const part = assignment.meetingPartSlot.meetingPart;
       const section = part.meetingSection;
       const meeting = section.meeting;
-      const token = signParticipationToken({
-        assignmentId: assignment.id,
-        participantId: assignment.participant.id,
-        version: updated.participationTokenVersion
-      });
-
       await tx.auditLog.create({
         data: {
           congregationId: req.user!.congregationId,
@@ -443,40 +467,19 @@ assignmentsRouter.post(
         }
       });
 
-      return { token };
+      return { code: accessCode };
     });
 
     if (!result) {
       return res.status(409).json({ message: "A designacao nao esta mais disponivel." });
     }
 
-    const appUrl =
-      process.env.PARTICIPATION_APP_URL ?? "http://localhost:5173/participation";
-    const baseUrl = appUrl.split("#", 1)[0];
     res.json({
-      token: result.token,
-      link: `${baseUrl}#token=${encodeURIComponent(result.token)}`
+      code: result.code,
+      link: participationLinkFromCode(result.code)
     });
   }
 );
-
-function publicAssignmentsAppUrl() {
-  return (
-    process.env.PUBLIC_APP_URL ??
-    `${process.env.FRONTEND_ORIGIN?.split(",")[0] ?? "http://localhost:5173"}/public`
-  );
-}
-
-async function findActiveDefaultPublicToken(congregationId: string, now = new Date()) {
-  return prisma.publicAccessToken.findFirst({
-    where: {
-      congregationId,
-      isDefault: true,
-      revokedAt: null,
-      expiresAt: { gt: now }
-    }
-  });
-}
 
 assignmentsRouter.post("/assignments/public-link", requireAuth, requireAdmin, async (req, res) => {
   const publicToken = await findActiveDefaultPublicToken(req.user!.congregationId);
@@ -721,7 +724,8 @@ assignmentsRouter.put("/assignments/:year/:week/:type", requireAuth, requireWrit
             responseStatus: "PENDING",
             respondedAt: null,
             participationTokenVersion: { increment: 1 },
-            participationTokenIssuedAt: null
+            participationTokenIssuedAt: null,
+            participationAccessCodeHash: null
           },
           create: { meetingPartSlotId: found.slot.id, participantId: nextParticipantId }
         });

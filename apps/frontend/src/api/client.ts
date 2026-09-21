@@ -7,6 +7,16 @@ export type ApiOptions = RequestInit & {
   authToken?: string;
 };
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const { publicToken, authToken, ...requestOptions } = options;
   const headers = new Headers(requestOptions.headers);
@@ -17,7 +27,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   const response = await fetch(`${API_URL}${path}`, { ...requestOptions, headers });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ message: "Erro na API." }));
-    throw new Error(body.message ?? "Erro na API.");
+    throw new ApiError(body.message ?? "Erro na API.", response.status);
   }
   return response.json();
 }

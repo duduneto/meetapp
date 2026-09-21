@@ -20,6 +20,8 @@ const actionLabels: Record<string, string> = {
   ASSIGNMENT_REMOVED: "removeu uma designação",
   MEETING_FIELD_UPDATED: "alterou uma informação da reunião",
   PARTICIPATION_LINK_GENERATED: "gerou um link de confirmação",
+  PARTICIPATION_NOTIFICATION_SENT: "enviou uma confirmação pelo WhatsApp",
+  PARTICIPATION_NOTIFICATION_FAILED: "tentou enviar uma confirmação pelo WhatsApp",
   PARTICIPATION_CONFIRMED: "confirmou a participação",
   PARTICIPATION_REJECTED: "rejeitou a participação",
   PUBLIC_MEETING_LINK_SHARED: "compartilhou o link público da reunião",

@@ -36,6 +36,7 @@ const router = createBrowserRouter([
   },
   { path: "/login", element: <LoginPage /> },
   { path: "/participation", element: <ParticipationPage /> },
+  { path: "/participation/:code", element: <ParticipationPage /> },
   { path: "/public", element: <PublicPage /> }
 ]);
 

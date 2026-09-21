@@ -14,6 +14,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { ParticipantSuggestionsPopover } from "./ParticipantSuggestionsPopover";
 import { MeetingActivityHistory } from "./MeetingActivityHistory";
+import { MinistryParticipationNotificationsButton } from "./MinistryParticipationNotificationsButton";
 import { ParticipationLinkButton } from "./ParticipationLinkButton";
 import { MeetingShareButton } from "./MeetingShareButton";
 
@@ -174,7 +175,37 @@ export function MeetingTable({
               className="meeting-section rounded-xl border bg-card shadow-xs"
               data-section={section.sectionKey}
             >
-              <h2>{section.title}</h2>
+              <div className="meeting-section-header">
+                <h2>{section.title}</h2>
+                {payload.canWrite &&
+                  !editing &&
+                  payload.meeting.type === "midweek" &&
+                  section.sectionKey === "ministery" && (
+                    <MinistryParticipationNotificationsButton
+                      year={payload.meeting.year}
+                      week={payload.meeting.week}
+                      startAt={payload.meeting.startAt}
+                      endAt={payload.meeting.endAt}
+                      assignments={section.parts.flatMap((part) =>
+                        part.slots.flatMap((slot) =>
+                          slot.assignmentId && slot.participant && slot.responseStatus
+                            ? [
+                                {
+                                  assignmentId: slot.assignmentId,
+                                  participantName: slot.participant.name,
+                                  partTitle: part.title,
+                                  slotLabel: slot.label,
+                                  hasWhatsapp: slot.participant.hasWhatsapp,
+                                  responseStatus: slot.responseStatus,
+                                  notificationStatus: slot.participationNotificationStatus,
+                                },
+                              ]
+                            : [],
+                        ),
+                      )}
+                    />
+                  )}
+              </div>
               {section.parts.map((part) => (
                 <div className="assignment-row" key={part.id}>
                   <div className="part-title">

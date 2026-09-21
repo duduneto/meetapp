@@ -150,28 +150,37 @@ body {
   padding: 0;
 }
 
-.meeting-section h2 {
+.meeting-section-header {
+  align-items: center;
+  color: #fff;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.5rem 0.65rem 0.5rem 0.85rem;
+}
+
+.meeting-section-header h2 {
   color: #fff;
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   margin: 0;
-  padding: 0.65rem 0.85rem;
+  padding: 0;
 }
 
-.meeting-section[data-section="treasures"] h2 {
+.meeting-section[data-section="treasures"] .meeting-section-header {
   background: #3c7f8b;
 }
 
-.meeting-section[data-section="ministery"] h2 {
+.meeting-section[data-section="ministery"] .meeting-section-header {
   background: #d68f00;
 }
 
-.meeting-section[data-section="christianLife"] h2 {
+.meeting-section[data-section="christianLife"] .meeting-section-header {
   background: #bf2f13;
 }
 
-.meeting-section:not([data-section="treasures"]):not([data-section="ministery"]):not([data-section="christianLife"]) h2 {
+.meeting-section:not([data-section="treasures"]):not([data-section="ministery"]):not([data-section="christianLife"]) .meeting-section-header {
   background: var(--primary);
   color: var(--primary-foreground);
 }
