@@ -8,9 +8,9 @@ import type {
 import { formatDateRange } from "../../hooks";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import { ParticipantSuggestionsPopover } from "./ParticipantSuggestionsPopover";
 import { MeetingActivityHistory } from "./MeetingActivityHistory";
@@ -33,6 +33,7 @@ export function MeetingTable({
   className?: string;
 }) {
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [draftAssignments, setDraftAssignments] = useState<DraftAssignments>({});
   const [weekendFields, setWeekendFields] = useState({
     publicTalkTheme: payload.meeting.publicTalkTheme ?? "",
@@ -57,79 +58,98 @@ export function MeetingTable({
 
   const title = payload.meeting.type === "midweek" ? "Reunião de Meio de Semana" : "Reunião de Fim de Semana";
   const participantOptions = useMemo(() => participants.filter((participant) => !participant.deletedAt), [participants]);
+  const participantSelectOptions = useMemo(
+    () => [
+      { value: "", label: "Sem Designação" },
+      ...participantOptions.map((participant) => ({
+        value: participant.id,
+        label: participant.name,
+      })),
+    ],
+    [participantOptions],
+  );
 
   async function save() {
-    await onSave({
-      assignments: Object.entries(draftAssignments).map(([key, participantId]) => {
-        const [partKey, position] = key.split(":");
-        return { partKey, position: Number(position), participantId: participantId || null };
-      }),
-      weekendFields: payload.meeting.type === "weekend" ? weekendFields : undefined
-    });
-    setEditing(false);
+    setSaving(true);
+    try {
+      await onSave({
+        assignments: Object.entries(draftAssignments).map(([key, participantId]) => {
+          const [partKey, position] = key.split(":");
+          return { partKey, position: Number(position), participantId: participantId || null };
+        }),
+        weekendFields: payload.meeting.type === "weekend" ? weekendFields : undefined
+      });
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <Card className={cn("overflow-visible py-0 print:ring-0", className)}>
-      <CardHeader className="no-print border-b py-4">
-        <div className="flex min-w-0 items-start gap-2">
-          {onBack && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="-ml-2"
-              onClick={onBack}
-            >
-              <ArrowLeft />
-              Voltar
+    <Card className={cn("min-h-0 overflow-hidden py-0 print:ring-0", className)}>
+      <CardHeader className="no-print shrink-0 border-b bg-card py-4 has-data-[slot=card-action]:grid-cols-1">
+        <div className="flex w-full min-w-0 flex-col gap-3 @min-[640px]/card-header:flex-row @min-[640px]/card-header:items-start @min-[640px]/card-header:justify-between">
+          <div className="flex min-w-0 items-start gap-2">
+            {onBack && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="-ml-2 shrink-0"
+                onClick={onBack}
+              >
+                <ArrowLeft />
+                Voltar
+              </Button>
+            )}
+            <div className="min-w-0">
+              <CardTitle className="text-xl">{title}</CardTitle>
+              <CardDescription>
+                {formatDateRange(payload.meeting.startAt, payload.meeting.endAt)}
+              </CardDescription>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 @max-[639px]/card-header:w-full">
+            {payload.canSharePublicLink && (
+              <MeetingShareButton
+                year={payload.meeting.year}
+                week={payload.meeting.week}
+                type={payload.meeting.type}
+              />
+            )}
+            {payload.canWrite && (
+              <MeetingActivityHistory
+                year={payload.meeting.year}
+                week={payload.meeting.week}
+                type={payload.meeting.type}
+              />
+            )}
+            <Button variant="outline" size="icon" title="Imprimir" onClick={() => window.print()}>
+              <Printer size={18} />
             </Button>
-          )}
-          <div className="min-w-0">
-            <CardTitle className="text-xl">{title}</CardTitle>
-            <CardDescription>{formatDateRange(payload.meeting.startAt, payload.meeting.endAt)}</CardDescription>
+            {payload.canWrite && !editing && (
+              <Button type="button" onClick={() => setEditing(true)}>
+                <SquarePen size={16} />
+                Editar
+              </Button>
+            )}
+            {editing && (
+              <>
+                <Button type="button" variant="outline" disabled={saving} onClick={() => setEditing(false)}>
+                  <X size={16} />
+                  Cancelar
+                </Button>
+                <Button type="button" disabled={saving} onClick={save}>
+                  <Save size={16} />
+                  {saving ? "Salvando..." : "Salvar"}
+                </Button>
+              </>
+            )}
           </div>
         </div>
-        <CardAction className="flex flex-wrap items-center gap-2">
-          {payload.canSharePublicLink && (
-            <MeetingShareButton
-              year={payload.meeting.year}
-              week={payload.meeting.week}
-              type={payload.meeting.type}
-            />
-          )}
-          {payload.canWrite && (
-            <MeetingActivityHistory
-              year={payload.meeting.year}
-              week={payload.meeting.week}
-              type={payload.meeting.type}
-            />
-          )}
-          <Button variant="outline" size="icon" title="Imprimir" onClick={() => window.print()}>
-            <Printer size={18} />
-          </Button>
-          {payload.canWrite && !editing && (
-            <Button onClick={() => setEditing(true)}>
-              <SquarePen size={16} />
-              Editar
-            </Button>
-          )}
-          {editing && (
-            <>
-              <Button variant="outline" onClick={() => setEditing(false)}>
-                <X size={16} />
-                Cancelar
-              </Button>
-              <Button onClick={save}>
-                <Save size={16} />
-                Salvar
-              </Button>
-            </>
-          )}
-        </CardAction>
       </CardHeader>
 
-      <CardContent className="space-y-4 pb-4">
+      <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
 
       {payload.meeting.bibleReading && <div className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">Leitura da semana: <strong>{payload.meeting.bibleReading}</strong></div>}
 
@@ -191,14 +211,18 @@ export function MeetingTable({
                         <label key={slot.id} className="slot">
                           <span>{slot.label}</span>
                           {editing && part.assignable ? (
-                            <NativeSelect className="w-full" value={draftAssignments[key] ?? ""} onChange={(event) => setDraftAssignments((current) => ({ ...current, [key]: event.target.value }))}>
-                              <NativeSelectOption value="">Sem Designacao</NativeSelectOption>
-                              {participantOptions.map((participant) => (
-                                <NativeSelectOption key={participant.id} value={participant.id}>
-                                  {participant.name}
-                                </NativeSelectOption>
-                              ))}
-                            </NativeSelect>
+                            <SearchableSelect
+                              options={participantSelectOptions}
+                              value={draftAssignments[key] ?? ""}
+                              placeholder="Buscar participante..."
+                              emptyMessage="Nenhum participante encontrado."
+                              onValueChange={(participantId) =>
+                                setDraftAssignments((current) => ({
+                                  ...current,
+                                  [key]: participantId,
+                                }))
+                              }
+                            />
                           ) : (
                             <div className="flex flex-col items-start gap-1.5">
                               <strong>{slot.participant?.name ?? "Sem Designacao"}</strong>

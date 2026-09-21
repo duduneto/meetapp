@@ -234,7 +234,7 @@ function MonthLevel({
           <section key={group.year} aria-labelledby={`public-year-${group.year}`}>
             <h2
               id={`public-year-${group.year}`}
-              className="sticky top-0 z-10 border-y bg-muted/95 px-4 py-2 text-xs font-semibold tracking-widest text-muted-foreground backdrop-blur"
+              className="sticky top-0 z-10 border-y border-primary/20 bg-primary px-4 py-2 text-xs font-semibold tracking-widest text-primary-foreground backdrop-blur"
             >
               {group.year}
             </h2>
@@ -248,7 +248,7 @@ function MonthLevel({
                   onClick={() => onSelect(month)}
                 >
                   <span className="flex min-w-0 items-center gap-3">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
                       <CalendarDays className="size-5" />
                     </span>
                     <motion.strong

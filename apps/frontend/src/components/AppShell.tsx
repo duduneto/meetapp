@@ -95,7 +95,7 @@ export function AppShell() {
         <SidebarRail />
       </Sidebar>
       <SidebarInset>
-        <header className="no-print sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-sidebar-border bg-background/90 px-4 backdrop-blur-md">
+        <header className="no-print flex h-14 shrink-0 items-center gap-3 border-b border-sidebar-border bg-background/90 px-4">
           <SidebarTrigger />
           <div className="h-4 w-px bg-border" />
           <span className="font-heading text-sm font-medium">{currentPage}</span>
