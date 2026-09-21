@@ -1,9 +1,33 @@
-import { Router } from "express";
+import { Prisma } from "@prisma/client";
+import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import { permissionsFor, requireAuth, requireWrite } from "../auth/middleware.js";
+import { permissionsFor, requireAdmin, requireAuth, requireWrite } from "../auth/middleware.js";
+import { signParticipationToken } from "../auth/participationJwt.js";
+import { signPublicAccessToken } from "../auth/publicAccessJwt.js";
 import { prisma } from "../lib/prisma.js";
 
 export const assignmentsRouter = Router();
+
+const participantSuggestionsQuerySchema = z.object({
+  role: z.enum(["publisher", "assistant"]).default("publisher"),
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(50).default(20)
+});
+
+const activityQuerySchema = z.object({
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(100).default(25)
+});
+
+type ParticipantSuggestionRole = z.infer<typeof participantSuggestionsQuerySchema>["role"];
+
+type ParticipantSuggestionRow = {
+  participantId: string;
+  participantName: string;
+  lastStartAt: Date | null;
+  lastEndAt: Date | null;
+  lastTitle: string | null;
+};
 
 function songsFromRawPayload(rawSourcePayload: unknown) {
   if (!rawSourcePayload || typeof rawSourcePayload !== "object" || Array.isArray(rawSourcePayload)) return undefined;
@@ -21,7 +45,8 @@ export async function buildAssignmentPayload(
   year: number,
   week: number,
   type: string,
-  canWrite: boolean
+  canWrite: boolean,
+  canSharePublicLink = false
 ) {
   const meetingWeek = await prisma.meetingWeek.findFirst({
     where: { congregationId, year, yearWeek: week },
@@ -80,6 +105,9 @@ export async function buildAssignmentPayload(
             id: slot.id,
             position: slot.position,
             label: slot.label,
+            assignmentId: slot.assignment?.id ?? null,
+            responseStatus: slot.assignment?.responseStatus ?? null,
+            respondedAt: slot.assignment?.respondedAt ?? null,
             participant: slot.assignment?.participant
               ? {
                   id: slot.assignment.participant.id,
@@ -91,7 +119,8 @@ export async function buildAssignmentPayload(
         }))
       }))
     },
-    canWrite
+    canWrite,
+    canSharePublicLink
   };
 }
 
@@ -135,13 +164,396 @@ assignmentsRouter.get("/assignment-months/:year/:month/weeks", requireAuth, asyn
   });
 });
 
+async function sendParticipantSuggestions(
+  req: Request,
+  res: Response,
+  fixedRole?: ParticipantSuggestionRole
+) {
+  const query = participantSuggestionsQuerySchema.parse(req.query);
+  const role = fixedRole ?? query.role;
+  const { offset, limit } = query;
+  const year = Number(req.params.year);
+  const week = Number(req.params.week);
+  const congregationId = req.user!.congregationId;
+  const slotLabel = role === "publisher" ? "publicador" : "ajudante";
+
+  const targetWeek = await prisma.meetingWeek.findFirst({
+    where: {
+      congregationId,
+      year,
+      yearWeek: week,
+      meetings: { some: { type: "midweek" } }
+    },
+    select: { startAt: true }
+  });
+
+  if (!targetWeek) {
+    return res.status(404).json({ message: "Reuniao de meio de semana nao encontrada." });
+  }
+
+  const rows = await prisma.$queryRaw<ParticipantSuggestionRow[]>(Prisma.sql`
+    SELECT
+      participant."id" AS "participantId",
+      participant."name" AS "participantName",
+      last_assignment."startAt" AS "lastStartAt",
+      last_assignment."endAt" AS "lastEndAt",
+      last_assignment."title" AS "lastTitle"
+    FROM "Participant" AS participant
+    LEFT JOIN LATERAL (
+      SELECT
+        meeting_week."startAt" AS "startAt",
+        meeting_week."endAt" AS "endAt",
+        meeting_part."title" AS "title"
+      FROM "Assignment" AS assignment
+      INNER JOIN "MeetingPartSlot" AS meeting_part_slot
+        ON meeting_part_slot."id" = assignment."meetingPartSlotId"
+      INNER JOIN "MeetingPart" AS meeting_part
+        ON meeting_part."id" = meeting_part_slot."meetingPartId"
+      INNER JOIN "MeetingSection" AS meeting_section
+        ON meeting_section."id" = meeting_part."meetingSectionId"
+      INNER JOIN "Meeting" AS meeting
+        ON meeting."id" = meeting_section."meetingId"
+      INNER JOIN "MeetingWeek" AS meeting_week
+        ON meeting_week."id" = meeting."meetingWeekId"
+      WHERE assignment."participantId" = participant."id"
+        AND meeting."type" = 'midweek'
+        AND meeting_section."sectionKey" = 'ministery'
+        AND LOWER(meeting_part_slot."label") = ${slotLabel}
+        AND meeting_week."congregationId" = ${congregationId}
+        AND meeting_week."startAt" < ${targetWeek.startAt}
+      ORDER BY meeting_week."startAt" DESC, assignment."createdAt" DESC
+      LIMIT 1
+    ) AS last_assignment ON TRUE
+    WHERE participant."congregationId" = ${congregationId}
+      AND participant."deletedAt" IS NULL
+    ORDER BY
+      last_assignment."startAt" ASC NULLS FIRST,
+      participant."name" ASC,
+      participant."id" ASC
+    LIMIT ${limit + 1}
+    OFFSET ${offset}
+  `);
+
+  const hasMore = rows.length > limit;
+  const suggestions = rows.slice(0, limit).map((row) => ({
+    participantId: row.participantId,
+    participantName: row.participantName,
+    lastAssignment:
+      row.lastStartAt && row.lastEndAt && row.lastTitle
+        ? {
+            startAt: row.lastStartAt,
+            endAt: row.lastEndAt,
+            title: row.lastTitle
+          }
+        : null
+  }));
+
+  res.json({
+    role,
+    suggestions,
+    nextOffset: hasMore ? offset + suggestions.length : null
+  });
+}
+
+assignmentsRouter.get(
+  "/assignments/:year/:week/midweek/participant-suggestions",
+  requireAuth,
+  (req, res) => sendParticipantSuggestions(req, res)
+);
+
+assignmentsRouter.get(
+  "/assignments/:year/:week/midweek/publisher-suggestions",
+  requireAuth,
+  (req, res) => sendParticipantSuggestions(req, res, "publisher")
+);
+
+assignmentsRouter.get(
+  "/assignments/:year/:week/:type/activity",
+  requireAuth,
+  async (req, res) => {
+    const { offset, limit } = activityQuerySchema.parse(req.query);
+    const meeting = await prisma.meeting.findFirst({
+      where: {
+        type: req.params.type,
+        meetingWeek: {
+          congregationId: req.user!.congregationId,
+          year: Number(req.params.year),
+          yearWeek: Number(req.params.week)
+        }
+      },
+      select: { id: true }
+    });
+
+    if (!meeting) return res.status(404).json({ message: "Reuniao nao encontrada." });
+
+    const activity = await prisma.auditLog.findMany({
+      where: { congregationId: req.user!.congregationId, meetingId: meeting.id },
+      orderBy: [{ changedAt: "desc" }, { id: "desc" }],
+      skip: offset,
+      take: limit + 1,
+      include: {
+        changedByUser: { select: { id: true, name: true } },
+        changedByParticipant: { select: { id: true, name: true } }
+      }
+    });
+
+    const participantIds = activity.flatMap((item) =>
+      item.entityType === "Assignment"
+        ? [item.previousValue, item.newValue].filter((value): value is string => Boolean(value))
+        : []
+    );
+    const participants = participantIds.length
+      ? await prisma.participant.findMany({
+          where: {
+            congregationId: req.user!.congregationId,
+            id: { in: participantIds }
+          },
+          select: { id: true, name: true }
+        })
+      : [];
+    const participantNames = new Map(
+      participants.map((participant) => [participant.id, participant.name])
+    );
+
+    const hasMore = activity.length > limit;
+    const page = activity.slice(0, limit).map((item) => {
+      const storedContext =
+        item.context && typeof item.context === "object" && !Array.isArray(item.context)
+          ? item.context
+          : {};
+      const hasResolvedParticipant =
+        (item.previousValue !== null && participantNames.has(item.previousValue)) ||
+        (item.newValue !== null && participantNames.has(item.newValue));
+      const isParticipantChange =
+        item.entityType === "Assignment" &&
+        (item.action.startsWith("ASSIGNMENT_") ||
+          (item.action === "UPDATED" && hasResolvedParticipant));
+      const context = isParticipantChange
+        ? {
+            ...storedContext,
+            previousParticipantName: item.previousValue
+              ? participantNames.get(item.previousValue) ?? "Participante removido"
+              : "Sem designação",
+            newParticipantName: item.newValue
+              ? participantNames.get(item.newValue) ?? "Participante removido"
+              : "Sem designação"
+          }
+        : item.context;
+
+      return {
+        id: item.id,
+        action: item.action,
+        changedAt: item.changedAt,
+        entityType: item.entityType,
+        entityId: item.entityId,
+        field: item.field,
+        previousValue: item.previousValue,
+        newValue: item.newValue,
+        context,
+        actor: item.changedByParticipant
+          ? { type: "PARTICIPANT", id: item.changedByParticipant.id, name: item.changedByParticipant.name }
+          : item.changedByUser
+            ? { type: "USER", id: item.changedByUser.id, name: item.changedByUser.name }
+            : { type: item.actorType, id: null, name: "Sistema" }
+      };
+    });
+
+    res.json({
+      activity: page,
+      nextOffset: hasMore ? offset + page.length : null
+    });
+  }
+);
+
+assignmentsRouter.post(
+  "/assignments/:assignmentId/participation-link",
+  requireAuth,
+  requireWrite,
+  async (req, res) => {
+    const result = await prisma.$transaction(async (tx) => {
+      const assignment = await tx.assignment.findFirst({
+        where: {
+          id: req.params.assignmentId,
+          participant: {
+            congregationId: req.user!.congregationId,
+            deletedAt: null
+          },
+          meetingPartSlot: {
+            meetingPart: {
+              meetingSection: {
+                meeting: {
+                  meetingWeek: { congregationId: req.user!.congregationId }
+                }
+              }
+            }
+          }
+        },
+        include: {
+          participant: { select: { id: true, name: true } },
+          meetingPartSlot: {
+            include: {
+              meetingPart: {
+                include: {
+                  meetingSection: {
+                    include: { meeting: { include: { meetingWeek: true } } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!assignment) return null;
+
+      const updated = await tx.assignment.update({
+        where: { id: assignment.id },
+        data: {
+          participationTokenVersion: { increment: 1 },
+          participationTokenIssuedAt: new Date()
+        }
+      });
+      const part = assignment.meetingPartSlot.meetingPart;
+      const section = part.meetingSection;
+      const meeting = section.meeting;
+      const token = signParticipationToken({
+        assignmentId: assignment.id,
+        participantId: assignment.participant.id,
+        version: updated.participationTokenVersion
+      });
+
+      await tx.auditLog.create({
+        data: {
+          congregationId: req.user!.congregationId,
+          meetingId: meeting.id,
+          changedByUserId: req.user!.id,
+          actorType: "USER",
+          action: "PARTICIPATION_LINK_GENERATED",
+          entityType: "Assignment",
+          entityId: assignment.id,
+          field: "participationTokenVersion",
+          previousValue: String(assignment.participationTokenVersion),
+          newValue: String(updated.participationTokenVersion),
+          context: {
+            participantName: assignment.participant.name,
+            sectionTitle: section.title,
+            partTitle: part.title,
+            slotLabel: assignment.meetingPartSlot.label
+          }
+        }
+      });
+
+      return { token };
+    });
+
+    if (!result) {
+      return res.status(409).json({ message: "A designacao nao esta mais disponivel." });
+    }
+
+    const appUrl =
+      process.env.PARTICIPATION_APP_URL ?? "http://localhost:5173/participation";
+    const baseUrl = appUrl.split("#", 1)[0];
+    res.json({
+      token: result.token,
+      link: `${baseUrl}#token=${encodeURIComponent(result.token)}`
+    });
+  }
+);
+
+assignmentsRouter.post(
+  "/assignments/:year/:week/:type/public-link",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const route = z
+      .object({
+        year: z.coerce.number().int(),
+        week: z.coerce.number().int(),
+        type: z.enum(["midweek", "weekend"])
+      })
+      .parse(req.params);
+    const now = new Date();
+
+    const [meetingWeek, publicToken] = await Promise.all([
+      prisma.meetingWeek.findFirst({
+        where: {
+          congregationId: req.user!.congregationId,
+          year: route.year,
+          yearWeek: route.week,
+          meetings: { some: { type: route.type } }
+        },
+        include: { meetings: { where: { type: route.type }, select: { id: true } } }
+      }),
+      prisma.publicAccessToken.findFirst({
+        where: {
+          congregationId: req.user!.congregationId,
+          isDefault: true,
+          revokedAt: null,
+          expiresAt: { gt: now }
+        }
+      })
+    ]);
+
+    if (!meetingWeek || meetingWeek.meetings.length === 0) {
+      return res.status(404).json({ message: "Reuniao nao encontrada." });
+    }
+    if (!publicToken) {
+      return res.status(409).json({
+        message: "Defina um token publico padrao e ativo em Configuracoes antes de compartilhar."
+      });
+    }
+
+    const token = signPublicAccessToken({
+      tokenId: publicToken.id,
+      congregationId: req.user!.congregationId,
+      expiresAt: publicToken.expiresAt
+    });
+    const configuredUrl =
+      process.env.PUBLIC_APP_URL ??
+      `${process.env.FRONTEND_ORIGIN?.split(",")[0] ?? "http://localhost:5173"}/public`;
+    const link = new URL(configuredUrl);
+    link.searchParams.set("token", token);
+    link.searchParams.set("year", String(meetingWeek.year));
+    link.searchParams.set("month", String(meetingWeek.month));
+    link.searchParams.set("week", String(meetingWeek.yearWeek));
+    link.searchParams.set("type", route.type);
+
+    await prisma.auditLog.create({
+      data: {
+        congregationId: req.user!.congregationId,
+        meetingId: meetingWeek.meetings[0].id,
+        changedByUserId: req.user!.id,
+        actorType: "USER",
+        action: "PUBLIC_MEETING_LINK_SHARED",
+        entityType: "PublicAccessToken",
+        entityId: publicToken.id,
+        field: "publicLink",
+        previousValue: null,
+        newValue: null,
+        context: {
+          tokenName: publicToken.name,
+          tokenExpiresAt: publicToken.expiresAt.toISOString(),
+          meetingType: route.type
+        }
+      }
+    });
+
+    res.json({
+      link: link.toString(),
+      expiresAt: publicToken.expiresAt,
+      publicToken: { id: publicToken.id, name: publicToken.name }
+    });
+  }
+);
+
 assignmentsRouter.get("/assignments/:year/:week/:type", requireAuth, async (req, res) => {
   const payload = await buildAssignmentPayload(
     req.user!.congregationId,
     Number(req.params.year),
     Number(req.params.week),
     req.params.type,
-    permissionsFor(req.user!.role).canWriteAssignments
+    permissionsFor(req.user!.role).canWriteAssignments,
+    permissionsFor(req.user!.role).canManageSettings
   );
   if (!payload) return res.status(404).json({ message: "Reuniao nao encontrada." });
   res.json(payload);
@@ -178,7 +590,21 @@ assignmentsRouter.put("/assignments/:year/:week/:type", requireAuth, requireWrit
         meetings: {
           where: { type },
           include: {
-            sections: { include: { parts: { include: { slots: { include: { assignment: true } } } } } }
+            sections: {
+              include: {
+                parts: {
+                  include: {
+                    slots: {
+                      include: {
+                        assignment: {
+                          include: { participant: { select: { name: true } } }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -196,12 +622,16 @@ assignmentsRouter.put("/assignments/:year/:week/:type", requireAuth, requireWrit
             await tx.auditLog.create({
               data: {
                 congregationId: req.user!.congregationId,
+                meetingId: meeting.id,
                 changedByUserId: req.user!.id,
+                actorType: "USER",
+                action: "MEETING_FIELD_UPDATED",
                 entityType: "Meeting",
                 entityId: meeting.id,
                 field,
                 previousValue,
-                newValue
+                newValue,
+                context: { meetingType: meeting.type }
               }
             });
           }
@@ -212,7 +642,7 @@ assignmentsRouter.put("/assignments/:year/:week/:type", requireAuth, requireWrit
     const slots = new Map(
       meeting.sections.flatMap((section) =>
         section.parts.flatMap((part) =>
-          part.slots.map((slot) => [`${part.partKey}:${slot.position}`, { part, slot }] as const)
+          part.slots.map((slot) => [`${part.partKey}:${slot.position}`, { section, part, slot }] as const)
         )
       )
     );
@@ -221,19 +651,30 @@ assignmentsRouter.put("/assignments/:year/:week/:type", requireAuth, requireWrit
       const found = slots.get(`${change.partKey}:${change.position}`);
       if (!found) continue;
       const currentParticipantId = found.slot.assignment?.participantId ?? null;
+      const currentParticipantName = found.slot.assignment?.participant.name ?? "Sem designação";
       const nextParticipantId = change.participantId ?? null;
       if (currentParticipantId === nextParticipantId) continue;
 
+      let assignmentId = found.slot.assignment?.id ?? found.slot.id;
+      let nextParticipantName = "Sem designação";
       if (nextParticipantId) {
         const participant = await tx.participant.findFirst({
           where: { id: nextParticipantId, congregationId: req.user!.congregationId, deletedAt: null }
         });
         if (!participant) throw new Error("Participante invalido.");
-        await tx.assignment.upsert({
+        nextParticipantName = participant.name;
+        const assignment = await tx.assignment.upsert({
           where: { meetingPartSlotId: found.slot.id },
-          update: { participantId: nextParticipantId },
+          update: {
+            participantId: nextParticipantId,
+            responseStatus: "PENDING",
+            respondedAt: null,
+            participationTokenVersion: { increment: 1 },
+            participationTokenIssuedAt: null
+          },
           create: { meetingPartSlotId: found.slot.id, participantId: nextParticipantId }
         });
+        assignmentId = assignment.id;
       } else if (found.slot.assignment) {
         await tx.assignment.delete({ where: { meetingPartSlotId: found.slot.id } });
       }
@@ -241,17 +682,42 @@ assignmentsRouter.put("/assignments/:year/:week/:type", requireAuth, requireWrit
       await tx.auditLog.create({
         data: {
           congregationId: req.user!.congregationId,
+          meetingId: meeting.id,
           changedByUserId: req.user!.id,
+          actorType: "USER",
+          action:
+            currentParticipantId === null
+              ? "ASSIGNMENT_CREATED"
+              : nextParticipantId === null
+                ? "ASSIGNMENT_REMOVED"
+                : "ASSIGNMENT_REASSIGNED",
           entityType: "Assignment",
-          entityId: found.slot.id,
-          field: `${change.partKey}.${change.position}`,
+          entityId: assignmentId,
+          field: "participantId",
           previousValue: currentParticipantId,
-          newValue: nextParticipantId
+          newValue: nextParticipantId,
+          context: {
+            sectionKey: found.section.sectionKey,
+            sectionTitle: found.section.title,
+            partKey: found.part.partKey,
+            partTitle: found.part.title,
+            slotPosition: found.slot.position,
+            slotLabel: found.slot.label,
+            previousParticipantName: currentParticipantName,
+            newParticipantName: nextParticipantName
+          }
         }
       });
     }
   });
 
-  const payload = await buildAssignmentPayload(req.user!.congregationId, year, week, type, true);
+  const payload = await buildAssignmentPayload(
+    req.user!.congregationId,
+    year,
+    week,
+    type,
+    true,
+    req.user!.role === "admin"
+  );
   res.json(payload);
 });

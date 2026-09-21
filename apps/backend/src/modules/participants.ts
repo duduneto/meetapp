@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { requireAuth, requireWrite } from "../auth/middleware.js";
+import { requireAdmin, requireAuth, requireWrite } from "../auth/middleware.js";
 import { prisma } from "../lib/prisma.js";
 
 export const participantsRouter = Router();
@@ -11,6 +11,21 @@ const participantSchema = z.object({
   phone: z.string().nullable().optional(),
   whatsapp: z.string().nullable().optional()
 });
+
+const bulkParticipantSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    phone: z.string().trim().min(1)
+  })
+  .strict()
+  .transform(({ name, phone }) => ({
+    name: name.replace(/\s+/g, " "),
+    gender: null,
+    phone,
+    whatsapp: phone
+  }));
+
+export const bulkParticipantsSchema = z.array(bulkParticipantSchema).min(1).max(500);
 
 const participantAssignmentsQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
@@ -125,6 +140,30 @@ participantsRouter.get("/participants/:id/assignments", requireAuth, async (req,
     nextOffset: hasMore ? offset + page.length : null
   });
 });
+
+participantsRouter.post(
+  "/participants/bulk",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const input = bulkParticipantsSchema.parse(req.body);
+    const participants = await prisma.$transaction(
+      input.map((participant) =>
+        prisma.participant.create({
+          data: {
+            ...participant,
+            congregationId: req.user!.congregationId
+          }
+        })
+      )
+    );
+
+    res.status(201).json({
+      createdCount: participants.length,
+      participants
+    });
+  }
+);
 
 participantsRouter.post("/participants", requireAuth, requireWrite, async (req, res) => {
   const input = participantSchema.parse(req.body);

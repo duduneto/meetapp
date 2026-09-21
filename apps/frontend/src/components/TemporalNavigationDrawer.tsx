@@ -81,7 +81,7 @@ export function TemporalNavigationDrawer({
   return (
     <aside
       className={cn(
-        "relative flex h-full shrink-0 flex-col overflow-visible rounded-xl border bg-card text-card-foreground shadow-sm transition-all duration-300 ease-in-out",
+        "relative z-10 flex h-full shrink-0 flex-col overflow-visible rounded-xl border bg-card text-card-foreground shadow-sm transition-all duration-300 ease-in-out",
         collapsed ? "w-16" : "w-64 max-w-[72vw]",
         className,
       )}
@@ -101,7 +101,7 @@ export function TemporalNavigationDrawer({
         type="button"
         variant="outline"
         size="icon"
-        className="absolute right-0 top-8 z-20 size-8 -translate-y-1/2 translate-x-1/2 rounded-full bg-background shadow-sm"
+        className="absolute right-0 top-8 z-20 size-7 -translate-y-1/2 translate-x-1/2 rounded-full bg-background shadow-sm"
         onClick={() => setCollapsed((current) => !current)}
         aria-label={collapsed ? "Expandir navegação temporal" : "Recolher navegação temporal"}
         aria-expanded={!collapsed}

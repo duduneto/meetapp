@@ -4,6 +4,7 @@ import type { Participant } from "../api/types";
 import { Button } from "../components/Button";
 import { InputText } from "../components/InputText";
 import { ParticipantAssignmentsTable } from "../components/participants/ParticipantAssignmentsTable";
+import { ParticipantEditSheet } from "../components/participants/ParticipantEditSheet";
 import { Select } from "../components/Select";
 
 const empty = { name: "", gender: "", phone: "", whatsapp: "" };
@@ -33,10 +34,18 @@ export function ParticipantsPage() {
     await load();
   }
 
+  function participantSaved(updated: Participant) {
+    setParticipants((current) =>
+      current
+        .map((participant) => participant.id === updated.id ? updated : participant)
+        .sort((left, right) => left.name.localeCompare(right.name, "pt-BR")),
+    );
+    setSelectedParticipant((current) => current?.id === updated.id ? updated : current);
+  }
+
   return (
     <section>
-      <div className="page-header">
-        <h1>Participantes</h1>
+      <div className="mb-4 flex justify-end">
         <div className="segmented">
           <Button variant={!deleted ? "selected" : "secondary"} onClick={() => { setDeleted(false); setSelectedParticipant(null); }}>
             Ativos
@@ -71,6 +80,7 @@ export function ParticipantsPage() {
                 <span>{participant.phone || "Sem telefone"} {participant.whatsapp ? `· WhatsApp ${participant.whatsapp}` : ""}</span>
               </div>
               <div className="row-actions">
+                <ParticipantEditSheet participant={participant} onSaved={participantSaved} />
                 <Button
                   variant={selectedParticipant?.id === participant.id ? "selected" : "secondary"}
                   aria-pressed={selectedParticipant?.id === participant.id}

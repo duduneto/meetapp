@@ -1,6 +1,7 @@
-import { BarChart3, CalendarDays, Settings, Users, UserRoundCog } from "lucide-react";
+import { BarChart3, CalendarDays, LogOut, Settings, Users, UserRoundCog } from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useSession } from "@/hooks";
+import { useAdminAuth } from "@/auth/AuthContext";
 import {
   Sidebar,
   SidebarContent,
@@ -28,6 +29,7 @@ const links = [
 
 export function AppShell() {
   const { session } = useSession();
+  const { firebaseUser, logout } = useAdminAuth();
   const location = useLocation();
   const currentPage = links.find((link) => location.pathname.startsWith(link.to))?.label ?? "Varjotapp";
 
@@ -72,9 +74,22 @@ export function AppShell() {
         </SidebarContent>
         <SidebarSeparator />
         <SidebarFooter className="p-3">
-          <div className="min-w-0 px-1 group-data-[collapsible=icon]:hidden">
-            <span className="block truncate text-xs text-sidebar-foreground/60">Conectado como</span>
-            <strong className="block truncate text-sm">{session?.user.name ?? "Carregando..."}</strong>
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1 px-1 group-data-[collapsible=icon]:hidden">
+              <span className="block truncate text-xs text-sidebar-foreground/60">Conectado como</span>
+              <strong className="block truncate text-sm">{session?.user.name ?? "Carregando..."}</strong>
+              <span className="block truncate text-xs text-sidebar-foreground/60">
+                {firebaseUser?.email ?? session?.user.email}
+              </span>
+            </div>
+            <SidebarMenuButton
+              className="size-8 shrink-0"
+              tooltip="Sair"
+              aria-label="Sair"
+              onClick={() => void logout()}
+            >
+              <LogOut />
+            </SidebarMenuButton>
           </div>
         </SidebarFooter>
         <SidebarRail />
@@ -86,7 +101,7 @@ export function AppShell() {
           <span className="font-heading text-sm font-medium">{currentPage}</span>
         </header>
         <main className="min-h-0 flex-1 p-4 md:p-6 lg:p-8">
-          <div className="mx-auto h-full w-full max-w-7xl">
+          <div className="h-full w-full">
             <Outlet />
           </div>
         </main>

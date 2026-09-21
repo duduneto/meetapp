@@ -1,12 +1,29 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { verifySecret } from "../lib/secrets.js";
+import { verifyPublicAccessToken } from "../auth/publicAccessJwt.js";
 import { buildAssignmentPayload } from "./assignments.js";
 
 export const publicRouter = Router();
 
 async function congregationFromPublicToken(token?: string) {
   if (!token) return null;
+
+  const claims = verifyPublicAccessToken(token);
+  if (claims) {
+    const storedToken = await prisma.publicAccessToken.findFirst({
+      where: {
+        id: claims.tokenId,
+        congregationId: claims.congregationId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() }
+      },
+      select: { congregationId: true }
+    });
+    if (storedToken) return storedToken.congregationId;
+  }
+
+  // Compatibility with links issued before managed public JWTs were introduced.
   const settings = await prisma.congregationSettings.findMany();
   for (const setting of settings) {
     if (await verifySecret(token, setting.anonymousReadTokenHash)) {

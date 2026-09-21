@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PublicTokensSettings } from "@/components/settings/PublicTokensSettings";
 
 type SettingsResponse = {
   congregation: {
@@ -27,11 +28,8 @@ export function SettingsPage() {
   }, []);
 
   return (
-    <section>
-      <div className="page-header">
-        <h1>Settings</h1>
-        <p>Segredos aparecem somente ao regenerar.</p>
-      </div>
+    <section className="space-y-6">
+      <p className="mb-4 text-sm text-muted-foreground">Segredos aparecem somente ao regenerar.</p>
       <Card>
         <CardContent className="form-grid grid gap-3">
           <Input placeholder="Nome da congregacao" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
@@ -41,8 +39,8 @@ export function SettingsPage() {
           <Button onClick={() => api<SettingsResponse>("/settings", { method: "PUT", body: JSON.stringify(form) })}>Salvar</Button>
         </CardContent>
       </Card>
+      <PublicTokensSettings />
       <div className="toolbar-actions">
-        <Button variant="outline" onClick={async () => setSecret((await api<{ token: string }>("/settings/anonymous-token/regenerate", { method: "POST" })).token)}>Regenerar token anonimo</Button>
         <Button variant="outline" onClick={async () => setSecret((await api<{ apiKey: string }>("/settings/script-api-key/regenerate", { method: "POST" })).apiKey)}>Regenerar API key</Button>
       </div>
       {secret && <pre className="secret">{secret}</pre>}

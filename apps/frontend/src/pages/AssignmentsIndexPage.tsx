@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Briefcase, Mic } from "lucide-react";
 import { api } from "../api/client";
 import { formatDateRange } from "../hooks";
 import {
@@ -45,10 +46,6 @@ export function AssignmentsIndexPage() {
 
   return (
     <section className="flex h-full min-h-0 flex-col">
-      <div className="page-header shrink-0">
-        <h1>Designacoes</h1>
-        <p>Navegue por mes, semana e tipo de reuniao.</p>
-      </div>
       <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto">
         <TemporalNavigationDrawer
           months={months}
@@ -64,10 +61,10 @@ export function AssignmentsIndexPage() {
             startAt={selectedMeeting.startAt}
             endAt={selectedMeeting.endAt}
             onBack={() => setSelectedMeeting(null)}
-            className="h-full min-w-80 flex-1 overflow-y-auto"
+            className="h-full flex-1 overflow-y-auto"
           />
         ) : (
-          <Card className="h-full min-w-80 flex-1">
+          <Card className="h-full flex-1">
             <CardHeader>
               <CardTitle>Semanas</CardTitle>
               <CardDescription>
@@ -84,20 +81,22 @@ export function AssignmentsIndexPage() {
                   <div>
                     <Button
                       type="button"
-                      variant="outline"
-                      size="sm"
+                      variant="default"
+                      size="default"
                       disabled={!week.hasMidweek}
                       onClick={() => setSelectedMeeting({ ...week, type: "midweek" })}
                     >
+                      <Briefcase data-icon="inline-start" />
                       Meio de Semana
                     </Button>
                     <Button
                       type="button"
-                      variant="outline"
-                      size="sm"
+                      variant="default"
+                      size="default"
                       disabled={!week.hasWeekend}
                       onClick={() => setSelectedMeeting({ ...week, type: "weekend" })}
                     >
+                      <Mic data-icon="inline-start" />
                       Final de Semana
                     </Button>
                   </div>

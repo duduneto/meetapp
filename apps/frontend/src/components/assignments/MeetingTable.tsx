@@ -1,12 +1,21 @@
-import { ArrowLeft, Printer, Save, SquarePen, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock3, Printer, Save, SquarePen, X, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { AssignmentPayload, Participant } from "../../api/types";
+import type {
+  AssignmentPayload,
+  AssignmentResponseStatus,
+  Participant,
+} from "../../api/types";
 import { formatDateRange } from "../../hooks";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { cn } from "@/lib/utils";
+import { ParticipantSuggestionsPopover } from "./ParticipantSuggestionsPopover";
+import { MeetingActivityHistory } from "./MeetingActivityHistory";
+import { ParticipationLinkButton } from "./ParticipationLinkButton";
+import { MeetingShareButton } from "./MeetingShareButton";
 
 type DraftAssignments = Record<string, string>;
 
@@ -82,6 +91,20 @@ export function MeetingTable({
           </div>
         </div>
         <CardAction className="flex flex-wrap items-center gap-2">
+          {payload.canSharePublicLink && (
+            <MeetingShareButton
+              year={payload.meeting.year}
+              week={payload.meeting.week}
+              type={payload.meeting.type}
+            />
+          )}
+          {payload.canWrite && (
+            <MeetingActivityHistory
+              year={payload.meeting.year}
+              week={payload.meeting.week}
+              type={payload.meeting.type}
+            />
+          )}
           <Button variant="outline" size="icon" title="Imprimir" onClick={() => window.print()}>
             <Printer size={18} />
           </Button>
@@ -108,7 +131,7 @@ export function MeetingTable({
 
       <CardContent className="space-y-4 pb-4">
 
-      {payload.meeting.bibleReading && <div className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">Leitura da semana: <strong className="text-foreground">{payload.meeting.bibleReading}</strong></div>}
+      {payload.meeting.bibleReading && <div className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">Leitura da semana: <strong>{payload.meeting.bibleReading}</strong></div>}
 
       {payload.meeting.type === "midweek" && payload.table.songs && (
         <div className="meeting-song">
@@ -127,11 +150,39 @@ export function MeetingTable({
       <div className="meeting-table">
         {payload.table.sections.map((section) => (
           <div key={section.id} className="contents">
-            <div className="meeting-section rounded-xl border bg-card shadow-xs">
+            <div
+              className="meeting-section rounded-xl border bg-card shadow-xs"
+              data-section={section.sectionKey}
+            >
               <h2>{section.title}</h2>
               {section.parts.map((part) => (
                 <div className="assignment-row" key={part.id}>
-                  <div className="part-title">{part.title}</div>
+                  <div className="part-title">
+                    <span className="block">{part.title}</span>
+                    {editing &&
+                      part.assignable &&
+                      section.sectionKey === "ministery" && (
+                        <div className="mt-2">
+                          <ParticipantSuggestionsPopover
+                            year={payload.meeting.year}
+                            week={payload.meeting.week}
+                            onSelect={(role, participantId) => {
+                              const roleLabel = role === "publisher" ? "publicador" : "ajudante";
+                              const slot = part.slots.find(
+                                (candidate) =>
+                                  candidate.label.trim().toLocaleLowerCase("pt-BR") === roleLabel,
+                              );
+                              if (!slot) return;
+
+                              setDraftAssignments((current) => ({
+                                ...current,
+                                [`${part.partKey}:${slot.position}`]: participantId,
+                              }));
+                            }}
+                          />
+                        </div>
+                      )}
+                  </div>
                   <div className="slots">
                     {part.slots.length === 0 && <span className="muted">Sem designacao</span>}
                     {part.slots.map((slot) => {
@@ -149,7 +200,15 @@ export function MeetingTable({
                               ))}
                             </NativeSelect>
                           ) : (
-                            <strong>{slot.participant?.name ?? "Sem Designacao"}</strong>
+                            <div className="flex flex-col items-start gap-1.5">
+                              <strong>{slot.participant?.name ?? "Sem Designacao"}</strong>
+                              {slot.participant && slot.responseStatus && (
+                                <ResponseStatus status={slot.responseStatus} />
+                              )}
+                              {payload.canWrite && slot.assignmentId && slot.participant && (
+                                <ParticipationLinkButton assignmentId={slot.assignmentId} />
+                              )}
+                            </div>
                           )}
                         </label>
                       );
@@ -173,6 +232,23 @@ export function MeetingTable({
       </div>
       </CardContent>
     </Card>
+  );
+}
+
+function ResponseStatus({ status }: { status: AssignmentResponseStatus }) {
+  const content =
+    status === "CONFIRMED"
+      ? { label: "Confirmado", icon: CheckCircle2, variant: "success" as const }
+      : status === "REJECTED"
+        ? { label: "Rejeitado", icon: XCircle, variant: "destructive" as const }
+        : { label: "Aguardando confirmação", icon: Clock3, variant: "warning" as const };
+  const Icon = content.icon;
+
+  return (
+    <Badge variant={content.variant}>
+      <Icon data-icon="inline-start" />
+      {content.label}
+    </Badge>
   );
 }
 

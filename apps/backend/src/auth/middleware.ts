@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
-import { resolveAuthenticatedEmail } from "./firebase.js";
+import { resolveAuthenticatedIdentity } from "./firebase.js";
 
 export type AuthUser = {
   id: string;
@@ -30,14 +30,20 @@ export function permissionsFor(role: string) {
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const email = await resolveAuthenticatedEmail(req.header("authorization"));
-  if (!email) return res.status(401).json({ message: "Token invalido." });
+  const identity = await resolveAuthenticatedIdentity(req.header("authorization"));
+  if (!identity) return res.status(401).json({ message: "Token Google invalido." });
 
   const user = await prisma.user.findFirst({
-    where: { email, active: true }
+    where: identity.development
+      ? { email: identity.email, active: true, role: "admin" }
+      : { firebaseUid: identity.uid, active: true, role: "admin" }
   });
 
-  if (!user) return res.status(403).json({ message: "Usuario sem acesso ativo." });
+  if (!user) {
+    return res.status(403).json({
+      message: "Esta conta Google nao esta vinculada a um administrador ativo."
+    });
+  }
 
   req.user = {
     id: user.id,

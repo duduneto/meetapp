@@ -7,6 +7,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum AssignmentResponseStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
 model Congregation {
   id           String                @id @default(cuid())
   name         String
@@ -17,26 +23,28 @@ model Congregation {
   participants Participant[]
   meetingWeeks MeetingWeek[]
   auditLogs    AuditLog[]
+  publicAccessTokens PublicAccessToken[]
 }
 
 model CongregationSettings {
-  id                         String       @id @default(cuid())
-  congregationId             String       @unique
-  timezone                   String       @default("America/Fortaleza")
-  midweekDefaultWeekday      Int          @default(3)
-  weekendDefaultWeekday      Int          @default(6)
-  anonymousReadTokenHash     String
-  anonymousReadTokenCreatedAt DateTime    @default(now())
-  scriptApiKeyHash           String
-  scriptApiKeyCreatedAt      DateTime     @default(now())
-  createdAt                  DateTime     @default(now())
-  updatedAt                  DateTime     @updatedAt
-  congregation               Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  id                          String       @id @default(cuid())
+  congregationId              String       @unique
+  timezone                    String       @default("America/Fortaleza")
+  midweekDefaultWeekday       Int          @default(3)
+  weekendDefaultWeekday       Int          @default(6)
+  anonymousReadTokenHash      String
+  anonymousReadTokenCreatedAt DateTime     @default(now())
+  scriptApiKeyHash            String
+  scriptApiKeyCreatedAt       DateTime     @default(now())
+  createdAt                   DateTime     @default(now())
+  updatedAt                   DateTime     @updatedAt
+  congregation                Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
 }
 
 model User {
   id             String       @id @default(cuid())
   congregationId String
+  firebaseUid    String?      @unique
   email          String
   name           String
   role           String
@@ -45,9 +53,27 @@ model User {
   updatedAt      DateTime     @updatedAt
   congregation   Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
   auditLogs      AuditLog[]
+  createdPublicAccessTokens PublicAccessToken[] @relation("PublicAccessTokenCreatedBy")
 
   @@unique([congregationId, email])
   @@index([email])
+}
+
+model PublicAccessToken {
+  id              String       @id @default(cuid())
+  congregationId  String
+  name            String
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  isDefault       Boolean      @default(false)
+  createdByUserId String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  congregation    Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  createdByUser   User?        @relation("PublicAccessTokenCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([congregationId, createdAt])
+  @@index([congregationId, isDefault, revokedAt, expiresAt])
 }
 
 model Participant {
@@ -62,6 +88,7 @@ model Participant {
   updatedAt      DateTime     @updatedAt
   congregation   Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
   assignments    Assignment[]
+  auditLogs      AuditLog[]   @relation("ParticipantAuditLogs")
 
   @@index([congregationId, deletedAt])
 }
@@ -88,31 +115,32 @@ model MeetingWeek {
 }
 
 model Meeting {
-  id                          String           @id @default(cuid())
-  meetingWeekId               String
-  type                        String
-  meetingDate                 DateTime?
-  publicTalkTheme             String?
-  publicSpeakerName           String?
-  publicSpeakerCongregation   String?
-  createdAt                   DateTime         @default(now())
-  updatedAt                   DateTime         @updatedAt
-  meetingWeek                 MeetingWeek      @relation(fields: [meetingWeekId], references: [id], onDelete: Cascade)
-  sections                    MeetingSection[]
+  id                        String           @id @default(cuid())
+  meetingWeekId             String
+  type                      String
+  meetingDate               DateTime?
+  publicTalkTheme           String?
+  publicSpeakerName         String?
+  publicSpeakerCongregation String?
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+  meetingWeek               MeetingWeek      @relation(fields: [meetingWeekId], references: [id], onDelete: Cascade)
+  sections                  MeetingSection[]
+  auditLogs                 AuditLog[]
 
   @@unique([meetingWeekId, type])
 }
 
 model MeetingSection {
-  id        String        @id @default(cuid())
-  meetingId String
+  id         String        @id @default(cuid())
+  meetingId  String
   sectionKey String
-  title     String
-  order     Int
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  meeting   Meeting       @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  parts     MeetingPart[]
+  title      String
+  order      Int
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  meeting    Meeting       @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  parts      MeetingPart[]
 
   @@unique([meetingId, sectionKey])
   @@index([meetingId, order])
@@ -148,28 +176,40 @@ model MeetingPartSlot {
 }
 
 model Assignment {
-  id                String          @id @default(cuid())
-  meetingPartSlotId String          @unique
-  participantId     String
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  meetingPartSlot   MeetingPartSlot @relation(fields: [meetingPartSlotId], references: [id], onDelete: Cascade)
-  participant       Participant     @relation(fields: [participantId], references: [id])
+  id                         String                   @id @default(cuid())
+  meetingPartSlotId          String                   @unique
+  participantId              String
+  responseStatus             AssignmentResponseStatus @default(PENDING)
+  respondedAt                DateTime?
+  participationTokenVersion  Int                      @default(0)
+  participationTokenIssuedAt DateTime?
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
+  meetingPartSlot            MeetingPartSlot          @relation(fields: [meetingPartSlotId], references: [id], onDelete: Cascade)
+  participant                Participant              @relation(fields: [participantId], references: [id])
 }
 
 model AuditLog {
-  id              String       @id @default(cuid())
-  congregationId  String
-  changedByUserId String
-  changedAt       DateTime     @default(now())
-  entityType      String
-  entityId        String
-  field           String
-  previousValue   String?
-  newValue        String?
-  congregation    Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
-  changedByUser   User         @relation(fields: [changedByUserId], references: [id])
+  id                     String       @id @default(cuid())
+  congregationId         String
+  meetingId              String?
+  changedByUserId        String?
+  changedByParticipantId String?
+  actorType              String       @default("USER")
+  action                 String       @default("UPDATED")
+  changedAt              DateTime     @default(now())
+  entityType             String
+  entityId               String
+  field                  String
+  previousValue          String?
+  newValue               String?
+  context                Json?
+  congregation           Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  meeting                Meeting?     @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  changedByUser          User?        @relation(fields: [changedByUserId], references: [id], onDelete: SetNull)
+  changedByParticipant   Participant? @relation("ParticipantAuditLogs", fields: [changedByParticipantId], references: [id], onDelete: SetNull)
 
   @@index([congregationId, changedAt])
+  @@index([meetingId, changedAt])
   @@index([entityType, entityId])
 }

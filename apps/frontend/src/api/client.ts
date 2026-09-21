@@ -1,14 +1,20 @@
+import { auth, isDevAuthBypass } from "@/auth/firebase";
+
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3333";
 
-export type ApiOptions = RequestInit & { publicToken?: string };
+export type ApiOptions = RequestInit & {
+  publicToken?: string;
+  authToken?: string;
+};
 
 export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
-  const headers = new Headers(options.headers);
+  const { publicToken, authToken, ...requestOptions } = options;
+  const headers = new Headers(requestOptions.headers);
   headers.set("Content-Type", "application/json");
-  const token = options.publicToken ? undefined : await getAuthToken();
+  const token = authToken ?? (publicToken ? undefined : await getAuthToken());
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const response = await fetch(`${API_URL}${path}`, { ...requestOptions, headers });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ message: "Erro na API." }));
     throw new Error(body.message ?? "Erro na API.");
@@ -17,5 +23,6 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
 }
 
 async function getAuthToken() {
-  return localStorage.getItem("varjotapp.devToken") ?? import.meta.env.VITE_DEV_AUTH_EMAIL ?? "admin@varjotapp.local";
+  if (isDevAuthBypass) return null;
+  return auth?.currentUser?.getIdToken() ?? null;
 }

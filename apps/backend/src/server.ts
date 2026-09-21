@@ -4,6 +4,7 @@ import express from "express";
 import { requireAuth, permissionsFor } from "./auth/middleware.js";
 import { assignmentsRouter } from "./modules/assignments.js";
 import { participantsRouter } from "./modules/participants.js";
+import { participationRouter } from "./modules/participation.js";
 import { publicRouter } from "./modules/publicRoutes.js";
 import { reportsRouter } from "./modules/reports.js";
 import { scriptImportRouter } from "./modules/scriptImport.js";
@@ -27,6 +28,7 @@ app.get("/me", requireAuth, (req, res) => {
 
 app.use(scriptImportRouter);
 app.use(publicRouter);
+app.use(participationRouter);
 app.use(assignmentsRouter);
 app.use(participantsRouter);
 app.use(usersRouter);

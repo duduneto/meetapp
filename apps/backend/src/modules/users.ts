@@ -8,7 +8,8 @@ export const usersRouter = Router();
 const userSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1),
-  role: z.enum(["admin", "editor"]),
+  firebaseUid: z.string().trim().min(1),
+  role: z.literal("admin").default("admin"),
   active: z.boolean().default(true)
 });
 

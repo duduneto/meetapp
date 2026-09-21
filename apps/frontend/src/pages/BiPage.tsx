@@ -10,10 +10,7 @@ export function BiPage() {
   }, []);
   return (
     <section>
-      <div className="page-header">
-        <h1>BI</h1>
-        <p>Distribuicao simples por participante.</p>
-      </div>
+      <p className="mb-4 text-sm text-muted-foreground">Distribuicao simples por participante.</p>
       <div className="data-list">
         {rows.map((row) => (
           <div className="data-row" key={row.participantId}>

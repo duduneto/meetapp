@@ -10,13 +10,13 @@
   background: var(--background);
   font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   font-size: 16px;
-  --background: #f7f5f0;
+  --background: #f0f0f1;
   --foreground: #17211b;
   --card: #fffdf9;
   --card-foreground: #17211b;
   --popover: #fffdf9;
   --popover-foreground: #17211b;
-  --primary: #1d5c48;
+  --primary: #0F2930;
   --primary-foreground: #ffffff;
   --secondary: #eee9df;
   --secondary-foreground: #244538;
@@ -25,7 +25,9 @@
   --accent: #f0c45c;
   --accent-foreground: #17211b;
   --destructive: #a93639;
-  --border: #ded9cf;
+  --success: #15803d;
+  --warning: #a16207;
+  --border: #f2f3ff;
   --input: #d4cec2;
   --ring: #3a8069;
   --chart-1: #1d5c48;
@@ -40,7 +42,7 @@
   --sidebar-primary-foreground: #17211b;
   --sidebar-accent: #2c3b4d;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #355348;
+  --sidebar-border: #3e4b5c;
   --sidebar-ring: #f0c45c;
 }
 
@@ -136,10 +138,46 @@ body {
   padding: 1rem;
 }
 
-.panel h2,
-.meeting-section h2 {
+.panel h2 {
   font-size: 1rem;
   margin: 0;
+}
+
+.meeting-section {
+  border: 1px solid #e7dfd1;
+  border-radius: 7px;
+  overflow: hidden;
+  padding: 0;
+}
+
+.meeting-section h2 {
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+}
+
+.meeting-section[data-section="treasures"] h2 {
+  background: #3c7f8b;
+}
+
+.meeting-section[data-section="ministery"] h2 {
+  background: #d68f00;
+}
+
+.meeting-section[data-section="christianLife"] h2 {
+  background: #bf2f13;
+}
+
+.meeting-section:not([data-section="treasures"]):not([data-section="ministery"]):not([data-section="christianLife"]) h2 {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.meeting-section .assignment-row {
+  padding-inline: 0.85rem;
 }
 
 .week-row,
@@ -318,8 +356,8 @@ body {
 }
 
 .meeting-song {
-  background: #f8f5ee;
-  border: 1px solid #e7dfd1;
+  background: #e8f4fc;
+  border: 1px solid #c5e3f5;
   border-radius: 7px;
   padding: 0.75rem;
 }
@@ -341,12 +379,6 @@ body {
 .meeting-table {
   display: grid;
   gap: 1rem;
-}
-
-.meeting-section {
-  border: 1px solid #e7dfd1;
-  border-radius: 7px;
-  padding: 0.85rem;
 }
 
 .part-title {
@@ -465,6 +497,8 @@ body {
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -504,6 +538,8 @@ body {
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.72 0.17 145);
+  --warning: oklch(0.77 0.16 70);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);

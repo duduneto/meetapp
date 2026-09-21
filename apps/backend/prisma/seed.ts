@@ -34,6 +34,7 @@ async function main() {
     }
   });
 
+  const seedAdminFirebaseUid = process.env.SEED_ADMIN_FIREBASE_UID?.trim();
   await prisma.user.upsert({
     where: {
       congregationId_email: {
@@ -41,9 +42,14 @@ async function main() {
         email: process.env.SEED_ADMIN_EMAIL ?? "admin@varjotapp.local"
       }
     },
-    update: { active: true, role: "admin" },
+    update: {
+      active: true,
+      role: "admin",
+      ...(seedAdminFirebaseUid ? { firebaseUid: seedAdminFirebaseUid } : {})
+    },
     create: {
       congregationId: congregation.id,
+      firebaseUid: seedAdminFirebaseUid || null,
       email: process.env.SEED_ADMIN_EMAIL ?? "admin@varjotapp.local",
       name: process.env.SEED_ADMIN_NAME ?? "Administrador",
       role: "admin",

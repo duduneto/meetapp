@@ -46,6 +46,62 @@ export type ParticipantAssignmentsPage = {
   nextOffset: number | null;
 };
 
+export type AssignmentSuggestionRole = "publisher" | "assistant";
+export type AssignmentResponseStatus = "PENDING" | "CONFIRMED" | "REJECTED";
+
+export type ParticipantSuggestion = {
+  participantId: string;
+  participantName: string;
+  lastAssignment: {
+    startAt: string;
+    endAt: string;
+    title: string;
+  } | null;
+};
+
+export type ParticipantSuggestionsPage = {
+  role: AssignmentSuggestionRole;
+  suggestions: ParticipantSuggestion[];
+  nextOffset: number | null;
+};
+
+export type ParticipationPayload = {
+  assignment: {
+    id: string;
+    status: AssignmentResponseStatus;
+    respondedAt: string | null;
+    participant: { id: string; name: string };
+    meeting: {
+      type: "midweek" | "weekend";
+      year: number;
+      week: number;
+      startAt: string;
+      endAt: string;
+    };
+    section: { key: string; title: string };
+    part: { key: string; title: string };
+    slot: { position: number; label: string };
+  };
+};
+
+export type MeetingActivity = {
+  id: string;
+  action: string;
+  changedAt: string;
+  entityType: string;
+  entityId: string;
+  field: string;
+  previousValue: string | null;
+  newValue: string | null;
+  context: Record<string, unknown> | null;
+  actor: { type: string; id: string | null; name: string };
+};
+
+export type MeetingActivityPage = {
+  activity: MeetingActivity[];
+  nextOffset: number | null;
+};
+
 export type AssignmentPayload = {
   meeting: {
     id: string;
@@ -78,10 +134,27 @@ export type AssignmentPayload = {
           id: string;
           position: number;
           label: string;
+          assignmentId: string | null;
+          responseStatus: AssignmentResponseStatus | null;
+          respondedAt: string | null;
           participant: { id: string; name: string; deletedAt?: string | null } | null;
         }>;
       }>;
     }>;
   };
   canWrite: boolean;
+  canSharePublicLink?: boolean;
+};
+
+export type PublicAccessTokenStatus = "ACTIVE" | "EXPIRED" | "REVOKED";
+
+export type PublicAccessToken = {
+  id: string;
+  name: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  isDefault: boolean;
+  createdAt: string;
+  status: PublicAccessTokenStatus;
+  createdByUser: { id: string; name: string } | null;
 };
