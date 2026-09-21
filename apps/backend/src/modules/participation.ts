@@ -8,6 +8,7 @@ import {
 import {
   participationTokenFromAuthorization,
   signParticipationToken,
+  type ParticipationTokenClaims,
   verifyParticipationToken
 } from "../auth/participationJwt.js";
 import { prisma } from "../lib/prisma.js";
@@ -15,9 +16,12 @@ import { buildPublicMeetingLink } from "../lib/publicLinks.js";
 
 export const participationRouter = Router();
 
-const participationResponseSchema = z.object({
-  status: z.enum(["CONFIRMED", "REJECTED"])
-});
+const participationResponseSchema = z
+  .object({
+    assignmentId: z.string().min(1),
+    status: z.enum(["CONFIRMED", "REJECTED"])
+  })
+  .strict();
 
 const participationSessionSchema = z
   .object({
@@ -56,12 +60,14 @@ type ParticipationAssignment = Prisma.AssignmentGetPayload<{
   include: typeof participationAssignmentInclude;
 }>;
 
-async function participationPayload(assignment: ParticipationAssignment) {
+function meetingIdFromAssignment(assignment: ParticipationAssignment) {
+  return assignment.meetingPartSlot.meetingPart.meetingSection.meeting.id;
+}
+
+function assignmentPayload(assignment: ParticipationAssignment) {
   const slot = assignment.meetingPartSlot;
   const part = slot.meetingPart;
   const section = part.meetingSection;
-  const meeting = section.meeting;
-  const week = meeting.meetingWeek;
   const companions = part.slots
     .filter((partSlot) => partSlot.id !== slot.id)
     .map((partSlot) => ({
@@ -74,7 +80,52 @@ async function participationPayload(assignment: ParticipationAssignment) {
           }
         : null
     }));
-  const meetingType = meeting.type === "weekend" ? "weekend" : "midweek";
+
+  return {
+    id: assignment.id,
+    status: assignment.responseStatus,
+    respondedAt: assignment.respondedAt,
+    section: {
+      key: section.sectionKey,
+      title: section.title,
+      order: section.order
+    },
+    part: {
+      key: part.partKey,
+      title: part.title,
+      order: part.order
+    },
+    slot: { position: slot.position, label: slot.label },
+    companions
+  };
+}
+
+async function participationPayload(anchor: ParticipationAssignment) {
+  const anchorMeeting = anchor.meetingPartSlot.meetingPart.meetingSection.meeting;
+  const week = anchorMeeting.meetingWeek;
+  const meetingType = anchorMeeting.type === "weekend" ? "weekend" : "midweek";
+  const assignments = await prisma.assignment.findMany({
+    where: {
+      participantId: anchor.participantId,
+      participant: { deletedAt: null },
+      meetingPartSlot: {
+        meetingPart: {
+          meetingSection: { meetingId: anchorMeeting.id }
+        }
+      }
+    },
+    include: participationAssignmentInclude
+  });
+  assignments.sort((left, right) => {
+    const leftPart = left.meetingPartSlot.meetingPart;
+    const rightPart = right.meetingPartSlot.meetingPart;
+    return (
+      leftPart.meetingSection.order - rightPart.meetingSection.order ||
+      leftPart.order - rightPart.order ||
+      left.meetingPartSlot.position - right.meetingPartSlot.position
+    );
+  });
+
   const publicMeetingLink = await buildPublicMeetingLink({
     congregationId: week.congregationId,
     year: week.year,
@@ -84,26 +135,18 @@ async function participationPayload(assignment: ParticipationAssignment) {
   });
 
   return {
-    assignment: {
-      id: assignment.id,
-      status: assignment.responseStatus,
-      respondedAt: assignment.respondedAt,
-      participant: {
-        id: assignment.participant.id,
-        name: assignment.participant.name
-      },
-      meeting: {
-        type: meetingType,
-        year: week.year,
-        week: week.yearWeek,
-        startAt: week.startAt,
-        endAt: week.endAt
-      },
-      section: { key: section.sectionKey, title: section.title },
-      part: { key: part.partKey, title: part.title },
-      slot: { position: slot.position, label: slot.label },
-      companions
+    participant: {
+      id: anchor.participant.id,
+      name: anchor.participant.name
     },
+    meeting: {
+      type: meetingType,
+      year: week.year,
+      week: week.yearWeek,
+      startAt: week.startAt,
+      endAt: week.endAt
+    },
+    assignments: assignments.map(assignmentPayload),
     publicMeetingLink
   };
 }
@@ -111,6 +154,15 @@ async function participationPayload(assignment: ParticipationAssignment) {
 function claimsFromAuthorization(authorization?: string) {
   const token = participationTokenFromAuthorization(authorization);
   return token ? verifyParticipationToken(token) : null;
+}
+
+function anchorWhere(claims: ParticipationTokenClaims) {
+  return {
+    id: claims.assignmentId,
+    participantId: claims.participantId,
+    participationTokenVersion: claims.version,
+    participant: { deletedAt: null }
+  };
 }
 
 participationRouter.post("/participation/session", async (req, res) => {
@@ -144,21 +196,16 @@ participationRouter.get("/participation", async (req, res) => {
   const claims = claimsFromAuthorization(req.header("authorization"));
   if (!claims) return res.status(401).json({ message: "Token de participacao invalido." });
 
-  const assignment = await prisma.assignment.findFirst({
-    where: {
-      id: claims.assignmentId,
-      participantId: claims.participantId,
-      participationTokenVersion: claims.version,
-      participant: { deletedAt: null }
-    },
+  const anchor = await prisma.assignment.findFirst({
+    where: anchorWhere(claims),
     include: participationAssignmentInclude
   });
 
-  if (!assignment) {
+  if (!anchor) {
     return res.status(409).json({ message: "A designacao nao esta mais disponivel." });
   }
 
-  res.json(await participationPayload(assignment));
+  res.json(await participationPayload(anchor));
 });
 
 participationRouter.post("/participation/response", async (req, res) => {
@@ -166,31 +213,39 @@ participationRouter.post("/participation/response", async (req, res) => {
   if (!claims) return res.status(401).json({ message: "Token de participacao invalido." });
   const input = participationResponseSchema.parse(req.body);
 
-  const result = await prisma.$transaction(async (tx) => {
+  const anchorId = await prisma.$transaction(async (tx) => {
+    const anchor = await tx.assignment.findFirst({
+      where: anchorWhere(claims),
+      include: participationAssignmentInclude
+    });
+    if (!anchor) return null;
+
+    const meetingId = meetingIdFromAssignment(anchor);
     const current = await tx.assignment.findFirst({
       where: {
-        id: claims.assignmentId,
+        id: input.assignmentId,
         participantId: claims.participantId,
-        participationTokenVersion: claims.version,
-        participant: { deletedAt: null }
+        participant: { deletedAt: null },
+        meetingPartSlot: {
+          meetingPart: {
+            meetingSection: { meetingId }
+          }
+        }
       },
       include: participationAssignmentInclude
     });
-
     if (!current) return null;
-    if (current.responseStatus === input.status) return current;
+    if (current.responseStatus === input.status) return anchor.id;
 
     const updatedCount = await tx.assignment.updateMany({
       where: {
         id: current.id,
         participantId: claims.participantId,
-        participationTokenVersion: claims.version,
         responseStatus: current.responseStatus,
         participant: { deletedAt: null }
       },
       data: { responseStatus: input.status, respondedAt: new Date() }
     });
-
     if (updatedCount.count !== 1) return null;
 
     const part = current.meetingPartSlot.meetingPart;
@@ -220,15 +275,20 @@ participationRouter.post("/participation/response", async (req, res) => {
       }
     });
 
-    return tx.assignment.findUniqueOrThrow({
-      where: { id: current.id },
-      include: participationAssignmentInclude
-    });
+    return anchor.id;
   });
 
-  if (!result) {
+  if (!anchorId) {
     return res.status(409).json({ message: "A designacao foi alterada ou removida." });
   }
 
-  res.json(await participationPayload(result));
+  const anchor = await prisma.assignment.findFirst({
+    where: anchorWhere(claims),
+    include: participationAssignmentInclude
+  });
+  if (!anchor) {
+    return res.status(409).json({ message: "O link de participacao nao esta mais disponivel." });
+  }
+
+  res.json(await participationPayload(anchor));
 });

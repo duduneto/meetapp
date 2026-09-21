@@ -76,12 +76,16 @@ export function MinistryParticipationNotificationsButton({
   week,
   startAt,
   endAt,
+  sectionKey,
+  sectionTitle,
   assignments,
 }: {
   year: number;
   week: number;
   startAt: string;
   endAt: string;
+  sectionKey: string;
+  sectionTitle: string;
   assignments: MinistryNotificationAssignment[];
 }) {
   const [open, setOpen] = useState(false);
@@ -123,7 +127,7 @@ export function MinistryParticipationNotificationsButton({
     setResult(null);
     try {
       const response = await api<NotificationBatch>(
-        `/assignments/${year}/${week}/midweek/sections/ministery/participation-notifications`,
+        `/assignments/${year}/${week}/midweek/sections/${encodeURIComponent(sectionKey)}/participation-notifications`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -177,7 +181,7 @@ export function MinistryParticipationNotificationsButton({
         <div className="space-y-1">
           <PopoverTitle>Enviar confirmações pelo WhatsApp</PopoverTitle>
           <PopoverDescription>
-            Selecione a data usada na mensagem e envie individualmente ou em lote.
+            {sectionTitle}: selecione a data usada na mensagem e envie individualmente ou em lote.
           </PopoverDescription>
         </div>
 

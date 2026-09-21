@@ -12,6 +12,14 @@ import { sendWhatsAppMessages } from "../lib/whatsappGateway.js";
 
 export const participationNotificationsRouter = Router();
 
+const NOTIFIABLE_MIDWEEK_SECTION_KEYS = new Set([
+  "midweekOpening",
+  "treasures",
+  "ministery",
+  "christianLife",
+  "midweekClosing"
+]);
+
 export function isValidDateOnly(value: string) {
   const parsed = new Date(`${value}T12:00:00.000Z`);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
@@ -81,12 +89,16 @@ export function createParticipationNotificationMessage(input: NotificationMessag
 }
 
 participationNotificationsRouter.post(
-  "/assignments/:year/:week/midweek/sections/ministery/participation-notifications",
+  "/assignments/:year/:week/midweek/sections/:sectionKey/participation-notifications",
   requireAuth,
   requireWrite,
   async (req, res) => {
     const input = participationNotificationRequestSchema.parse(req.body ?? {});
     const congregationId = req.user!.congregationId;
+    const sectionKey = req.params.sectionKey;
+    if (!NOTIFIABLE_MIDWEEK_SECTION_KEYS.has(sectionKey)) {
+      return res.status(400).json({ message: "Esta secao nao permite envio de confirmacoes." });
+    }
     const meeting = await prisma.meeting.findFirst({
       where: {
         type: "midweek",
@@ -103,7 +115,7 @@ participationNotificationsRouter.post(
           }
         },
         sections: {
-          where: { sectionKey: "ministery" },
+          where: { sectionKey },
           include: {
             parts: {
               orderBy: { order: "asc" },
@@ -131,7 +143,7 @@ participationNotificationsRouter.post(
 
     const section = meeting?.sections[0];
     if (!meeting || !section) {
-      return res.status(404).json({ message: "Secao de ministerio nao encontrada." });
+      return res.status(404).json({ message: "Secao da reuniao nao encontrada." });
     }
 
     const weekStart = meeting.meetingWeek.startAt.toISOString().slice(0, 10);

@@ -67,27 +67,27 @@ export type ParticipantSuggestionsPage = {
 };
 
 export type ParticipationPayload = {
-  assignment: {
+  participant: { id: string; name: string };
+  meeting: {
+    type: "midweek" | "weekend";
+    year: number;
+    week: number;
+    startAt: string;
+    endAt: string;
+  };
+  assignments: Array<{
     id: string;
     status: AssignmentResponseStatus;
     respondedAt: string | null;
-    participant: { id: string; name: string };
-    meeting: {
-      type: "midweek" | "weekend";
-      year: number;
-      week: number;
-      startAt: string;
-      endAt: string;
-    };
-    section: { key: string; title: string };
-    part: { key: string; title: string };
+    section: { key: string; title: string; order: number };
+    part: { key: string; title: string; order: number };
     slot: { position: number; label: string };
     companions: Array<{
       position: number;
       label: string;
       participant: { id: string; name: string } | null;
     }>;
-  };
+  }>;
   publicMeetingLink: string | null;
 };
 

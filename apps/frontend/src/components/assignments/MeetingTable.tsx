@@ -20,6 +20,14 @@ import { MeetingShareButton } from "./MeetingShareButton";
 
 type DraftAssignments = Record<string, string>;
 
+const notificationSectionKeys = new Set([
+  "midweekOpening",
+  "treasures",
+  "ministery",
+  "christianLife",
+  "midweekClosing",
+]);
+
 export function MeetingTable({
   payload,
   participants,
@@ -180,12 +188,14 @@ export function MeetingTable({
                 {payload.canWrite &&
                   !editing &&
                   payload.meeting.type === "midweek" &&
-                  section.sectionKey === "ministery" && (
+                  notificationSectionKeys.has(section.sectionKey) && (
                     <MinistryParticipationNotificationsButton
                       year={payload.meeting.year}
                       week={payload.meeting.week}
                       startAt={payload.meeting.startAt}
                       endAt={payload.meeting.endAt}
+                      sectionKey={section.sectionKey}
+                      sectionTitle={section.title}
                       assignments={section.parts.flatMap((part) =>
                         part.slots.flatMap((slot) =>
                           slot.assignmentId && slot.participant && slot.responseStatus
