@@ -3,7 +3,8 @@ import test from "node:test";
 import {
   generateParticipationAccessCode,
   hashParticipationAccessCode,
-  isParticipationAccessCode
+  isParticipationAccessCode,
+  participationLinkIssuedAfter
 } from "./participationAccessCode.js";
 
 test("creates a short URL-safe participation access code", () => {
@@ -20,4 +21,11 @@ test("hashes participation access codes deterministically", () => {
   assert.equal(hashParticipationAccessCode(code), hashParticipationAccessCode(code));
   assert.equal(hashParticipationAccessCode(code).length, 64);
   assert.equal(isParticipationAccessCode(`${code}.`), false);
+});
+
+test("expires participation links 180 days after they are issued", () => {
+  assert.equal(
+    participationLinkIssuedAfter(new Date("2026-09-21T12:00:00.000Z")).toISOString(),
+    "2026-03-25T12:00:00.000Z"
+  );
 });

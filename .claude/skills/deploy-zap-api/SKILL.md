@@ -182,6 +182,19 @@ Isso reduz o isolamento do Chromium. É aceitável aqui porque ele só renderiza
 
 **2. `.wwebjs_auth` é estado insubstituível.** Não está no pacote de deploy, não tem backup automático, e perdê-lo custa uma ação manual do usuário (escanear o QR). Qualquer limpeza em `/root/zap` precisa excluir esse diretório explicitamente. Vale o mesmo para `rm -rf` de "reinstalação limpa".
 
+**2b. Nem toda perda de sessão é culpa do deploy — verifique antes de assumir.** Quando o WhatsApp emite `LOGOUT` (o usuário removeu o aparelho em *Aparelhos conectados*, ou o WhatsApp invalidou a sessão), o `whatsapp-web.js` **apaga os dados de auth sozinho**. O sintoma é idêntico ao de uma sessão corrompida por restart: QR na tela e `.wwebjs_auth` encolhendo (já foi de 111M para 22M assim).
+
+Dois comandos separam as duas causas em segundos:
+
+```bash
+grep -iE "LOGOUT|disconnected" /root/.pm2/logs/zap-api-*.log | tail -5
+stat -c '%n modificado: %y' /root/zap/.wwebjs_auth
+```
+
+Se o `mtime` do diretório for **anterior** ao restart do PM2 (`pm2 describe zap-api | grep created`), a sessão já tinha sido apagada antes — o deploy não causou nada. Num caso real o LOGOUT foi às 23:16:48, o diretório mudou às 23:16:49 e o restart só aconteceu às 23:42: 26 minutos depois.
+
+A correção é a mesma nos dois casos (escanear o QR de novo), mas a conclusão a passar ao usuário é bem diferente — e atribuir ao deploy uma falha que veio do celular dele custa confiança à toa.
+
 **3. `WHATSAPP_API_URL` ausente faz o backend chamar a si mesmo** (default 3999 = porta do varjotapp). Primeiro item a checar quando o envio falha.
 
 **4. Nomes de pacote `t64` no Ubuntu 24.04+.** Ver passo 4.

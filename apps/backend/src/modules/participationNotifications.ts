@@ -50,6 +50,7 @@ type NotificationMessageInput = {
   slotLabel: string;
   companions: Array<{ label: string; name: string }>;
   link: string;
+  isReminder: boolean;
 };
 
 export function normalizeWhatsappNumber(value: string) {
@@ -68,18 +69,24 @@ export function createParticipationNotificationMessage(input: NotificationMessag
   const companionLines = input.companions
     .map((companion) => `${companion.label}: ${companion.name}`)
     .join("\n");
+  const headline = input.isReminder
+    ? `⏰ *Lembrete da sua designação* na reunião do meio de semana de ${formattedDate}.`
+    : `🎉 *Você recebeu uma designação* na reunião do meio de semana de ${formattedDate}.`;
+  const confirmationRequest = input.isReminder
+    ? "Ainda estamos aguardando sua resposta. Por favor, confirme se poderá participar pelo link:"
+    : "Confirme se poderá participar pelo link:";
 
   return [
     `Olá, ${input.participantName}! Tudo bem?`,
     "",
-    `🎉 *Você recebeu uma designação* na reunião do meio de semana de ${formattedDate}.`,
+    headline,
     "",
     `\`${input.sectionTitle}\``,
     `Parte: ${input.partTitle}`,
     `Função: \`${input.slotLabel}\``,
     companionLines,
     "",
-    "Confirme se poderá participar pelo link:",
+    confirmationRequest,
     input.link,
     "",
     "‼️ Caso não possa participar, selecione “Rejeitar” para nos avisar o quanto antes. ✅"
@@ -129,6 +136,13 @@ participationNotificationsRouter.post(
                         participationNotifications: {
                           orderBy: { createdAt: "desc" },
                           take: 1
+                        },
+                        _count: {
+                          select: {
+                            participationNotifications: {
+                              where: { status: "SENT" }
+                            }
+                          }
                         }
                       }
                     }
@@ -174,6 +188,7 @@ participationNotificationsRouter.post(
       partTitle: string;
       slotLabel: string;
       companions: Array<{ label: string; name: string }>;
+      isReminder: boolean;
     }> = [];
 
     for (const part of section.parts) {
@@ -207,6 +222,7 @@ participationNotificationsRouter.post(
         }
 
         const latest = assignment.participationNotifications[0];
+        const hasAlreadyReceived = assignment._count.participationNotifications > 0;
         const latestMatchesCurrentVersion =
           latest?.tokenVersion === assignment.participationTokenVersion;
         if (!input.force && latestMatchesCurrentVersion && latest?.status === "SENT") {
@@ -241,6 +257,7 @@ participationNotificationsRouter.post(
           tokenVersion: assignment.participationTokenVersion,
           partTitle: part.title,
           slotLabel: slot.label,
+          isReminder: hasAlreadyReceived,
           companions: part.slots
             .filter((candidateSlot) => candidateSlot.id !== slot.id)
             .flatMap((candidateSlot) =>
@@ -322,7 +339,8 @@ participationNotificationsRouter.post(
             partTitle: candidate.partTitle,
             slotLabel: candidate.slotLabel,
             companions: candidate.companions,
-            link
+            link,
+            isReminder: candidate.isReminder
           })
         });
       }

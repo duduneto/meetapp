@@ -70,6 +70,7 @@ model PublicAccessToken {
   id              String       @id @default(cuid())
   congregationId  String
   name            String
+  accessCode      String?      @unique
   expiresAt       DateTime
   revokedAt       DateTime?
   isDefault       Boolean      @default(false)
@@ -126,6 +127,7 @@ model Meeting {
   meetingWeekId             String
   type                      String
   meetingDate               DateTime?
+  initialSong               String?
   publicTalkTheme           String?
   publicSpeakerName         String?
   publicSpeakerCongregation String?

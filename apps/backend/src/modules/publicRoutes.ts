@@ -1,10 +1,27 @@
 import { Router } from "express";
+import { z } from "zod";
+import { isPublicAccessCode } from "../auth/publicAccessCode.js";
+import { signPublicAccessToken } from "../auth/publicAccessJwt.js";
 import { prisma } from "../lib/prisma.js";
 import { verifySecret } from "../lib/secrets.js";
 import { verifyPublicAccessToken } from "../auth/publicAccessJwt.js";
 import { buildAssignmentPayload } from "./assignments.js";
 
 export const publicRouter = Router();
+
+const publicSessionSchema = z
+  .object({
+    code: z.string().trim().refine(isPublicAccessCode, {
+      message: "Codigo de acesso publico invalido."
+    })
+  })
+  .strict();
+
+function bearerToken(authorization?: string) {
+  if (!authorization?.startsWith("Bearer ")) return null;
+  const token = authorization.slice("Bearer ".length).trim();
+  return token || null;
+}
 
 async function congregationFromPublicToken(token?: string) {
   if (!token) return null;
@@ -33,8 +50,30 @@ async function congregationFromPublicToken(token?: string) {
   return null;
 }
 
+publicRouter.post("/public/session", async (req, res) => {
+  const { code } = publicSessionSchema.parse(req.body);
+  const publicToken = await prisma.publicAccessToken.findFirst({
+    where: {
+      accessCode: code,
+      revokedAt: null,
+      expiresAt: { gt: new Date() }
+    }
+  });
+  if (!publicToken) {
+    return res.status(401).json({ message: "Link publico invalido, expirado ou revogado." });
+  }
+
+  const accessToken = signPublicAccessToken({
+    tokenId: publicToken.id,
+    congregationId: publicToken.congregationId,
+    expiresAt: publicToken.expiresAt
+  });
+  res.json({ accessToken, expiresAt: publicToken.expiresAt });
+});
+
 publicRouter.use("/public", async (req, res, next) => {
-  const congregationId = await congregationFromPublicToken(String(req.query.token ?? ""));
+  const token = bearerToken(req.header("authorization")) ?? String(req.query.token ?? "");
+  const congregationId = await congregationFromPublicToken(token);
   if (!congregationId) return res.status(401).json({ message: "Link publico invalido." });
   res.locals.congregationId = congregationId;
   next();

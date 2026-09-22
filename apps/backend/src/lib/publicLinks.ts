@@ -1,4 +1,4 @@
-import { signPublicAccessToken } from "../auth/publicAccessJwt.js";
+import { generatePublicAccessCode } from "../auth/publicAccessCode.js";
 import { prisma } from "./prisma.js";
 
 export function publicAssignmentsAppUrl() {
@@ -9,7 +9,7 @@ export function publicAssignmentsAppUrl() {
 }
 
 export async function findActiveDefaultPublicToken(congregationId: string, now = new Date()) {
-  return prisma.publicAccessToken.findFirst({
+  const token = await prisma.publicAccessToken.findFirst({
     where: {
       congregationId,
       isDefault: true,
@@ -17,6 +17,35 @@ export async function findActiveDefaultPublicToken(congregationId: string, now =
       expiresAt: { gt: now }
     }
   });
+  if (!token || token.accessCode) return token;
+
+  const accessCode = generatePublicAccessCode();
+  await prisma.publicAccessToken.updateMany({
+    where: { id: token.id, accessCode: null },
+    data: { accessCode }
+  });
+  return prisma.publicAccessToken.findUniqueOrThrow({ where: { id: token.id } });
+}
+
+export function publicAssignmentsLinkFromCode(
+  code: string,
+  selection?: {
+    year: number;
+    month: number;
+    week: number;
+    type: "midweek" | "weekend";
+  }
+) {
+  const link = new URL(publicAssignmentsAppUrl());
+  link.pathname = `${link.pathname.replace(/\/+$/u, "")}/${code}`;
+  link.search = "";
+  if (selection) {
+    link.searchParams.set("year", String(selection.year));
+    link.searchParams.set("month", String(selection.month));
+    link.searchParams.set("week", String(selection.week));
+    link.searchParams.set("type", selection.type);
+  }
+  return link;
 }
 
 export async function buildPublicMeetingLink(input: {
@@ -28,18 +57,8 @@ export async function buildPublicMeetingLink(input: {
   now?: Date;
 }) {
   const publicToken = await findActiveDefaultPublicToken(input.congregationId, input.now);
-  if (!publicToken) return null;
+  if (!publicToken?.accessCode) return null;
 
-  const token = signPublicAccessToken({
-    tokenId: publicToken.id,
-    congregationId: input.congregationId,
-    expiresAt: publicToken.expiresAt
-  });
-  const link = new URL(publicAssignmentsAppUrl());
-  link.searchParams.set("token", token);
-  link.searchParams.set("year", String(input.year));
-  link.searchParams.set("month", String(input.month));
-  link.searchParams.set("week", String(input.week));
-  link.searchParams.set("type", input.type);
+  const link = publicAssignmentsLinkFromCode(publicToken.accessCode, input);
   return link.toString();
 }

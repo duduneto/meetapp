@@ -7,10 +7,9 @@ import {
   hashParticipationAccessCode
 } from "../auth/participationAccessCode.js";
 import { participationLinkFromCode } from "../lib/participationLinks.js";
-import { signPublicAccessToken } from "../auth/publicAccessJwt.js";
 import {
   findActiveDefaultPublicToken,
-  publicAssignmentsAppUrl
+  publicAssignmentsLinkFromCode
 } from "../lib/publicLinks.js";
 import { prisma } from "../lib/prisma.js";
 
@@ -104,6 +103,7 @@ export async function buildAssignmentPayload(
       startAt: meetingWeek.startAt,
       endAt: meetingWeek.endAt,
       bibleReading: meetingWeek.bibleReading,
+      initialSong: meeting.initialSong,
       publicTalkTheme: meeting.publicTalkTheme,
       publicSpeakerName: meeting.publicSpeakerName,
       publicSpeakerCongregation: meeting.publicSpeakerCongregation
@@ -489,13 +489,10 @@ assignmentsRouter.post("/assignments/public-link", requireAuth, requireAdmin, as
     });
   }
 
-  const token = signPublicAccessToken({
-    tokenId: publicToken.id,
-    congregationId: req.user!.congregationId,
-    expiresAt: publicToken.expiresAt
-  });
-  const link = new URL(publicAssignmentsAppUrl());
-  link.searchParams.set("token", token);
+  if (!publicToken.accessCode) {
+    return res.status(500).json({ message: "Nao foi possivel gerar o link publico." });
+  }
+  const link = publicAssignmentsLinkFromCode(publicToken.accessCode);
 
   await prisma.auditLog.create({
     data: {
@@ -560,17 +557,15 @@ assignmentsRouter.post(
       });
     }
 
-    const token = signPublicAccessToken({
-      tokenId: publicToken.id,
-      congregationId: req.user!.congregationId,
-      expiresAt: publicToken.expiresAt
+    if (!publicToken.accessCode) {
+      return res.status(500).json({ message: "Nao foi possivel gerar o link publico." });
+    }
+    const link = publicAssignmentsLinkFromCode(publicToken.accessCode, {
+      year: meetingWeek.year,
+      month: meetingWeek.month,
+      week: meetingWeek.yearWeek,
+      type: route.type
     });
-    const link = new URL(publicAssignmentsAppUrl());
-    link.searchParams.set("token", token);
-    link.searchParams.set("year", String(meetingWeek.year));
-    link.searchParams.set("month", String(meetingWeek.month));
-    link.searchParams.set("week", String(meetingWeek.yearWeek));
-    link.searchParams.set("type", route.type);
 
     await prisma.auditLog.create({
       data: {
@@ -625,6 +620,7 @@ const saveAssignmentsSchema = z.object({
     .default([]),
   weekendFields: z
     .object({
+      initialSong: z.string().nullable().optional(),
       publicTalkTheme: z.string().nullable().optional(),
       publicSpeakerName: z.string().nullable().optional(),
       publicSpeakerCongregation: z.string().nullable().optional()
@@ -667,7 +663,12 @@ assignmentsRouter.put("/assignments/:year/:week/:type", requireAuth, requireWrit
     if (!meeting) throw new Error("Reuniao nao encontrada.");
 
     if (type === "weekend" && input.weekendFields) {
-      for (const field of ["publicTalkTheme", "publicSpeakerName", "publicSpeakerCongregation"] as const) {
+      for (const field of [
+        "initialSong",
+        "publicTalkTheme",
+        "publicSpeakerName",
+        "publicSpeakerCongregation"
+      ] as const) {
         if (field in input.weekendFields) {
           const previousValue = meeting[field] ?? null;
           const newValue = input.weekendFields[field] ?? null;

@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, Clock3, Printer, Save, SquarePen, X, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock3, Printer, Save, SquarePen, Trash2, X, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type {
   AssignmentPayload,
@@ -45,6 +45,7 @@ export function MeetingTable({
   const [saving, setSaving] = useState(false);
   const [draftAssignments, setDraftAssignments] = useState<DraftAssignments>({});
   const [weekendFields, setWeekendFields] = useState({
+    initialSong: payload.meeting.initialSong ?? "",
     publicTalkTheme: payload.meeting.publicTalkTheme ?? "",
     publicSpeakerName: payload.meeting.publicSpeakerName ?? "",
     publicSpeakerCongregation: payload.meeting.publicSpeakerCongregation ?? ""
@@ -59,6 +60,7 @@ export function MeetingTable({
     }
     setDraftAssignments(next);
     setWeekendFields({
+      initialSong: payload.meeting.initialSong ?? "",
       publicTalkTheme: payload.meeting.publicTalkTheme ?? "",
       publicSpeakerName: payload.meeting.publicSpeakerName ?? "",
       publicSpeakerCongregation: payload.meeting.publicSpeakerCongregation ?? ""
@@ -169,10 +171,15 @@ export function MeetingTable({
       )}
 
       {payload.meeting.type === "weekend" && (
-        <div className="weekend-fields">
-          <Field label="Tema" value={weekendFields.publicTalkTheme} editing={editing} onChange={(value) => setWeekendFields((current) => ({ ...current, publicTalkTheme: value }))} />
-          <Field label="Orador" value={weekendFields.publicSpeakerName} editing={editing} onChange={(value) => setWeekendFields((current) => ({ ...current, publicSpeakerName: value }))} />
-          <Field label="Congregacao" value={weekendFields.publicSpeakerCongregation} editing={editing} onChange={(value) => setWeekendFields((current) => ({ ...current, publicSpeakerCongregation: value }))} />
+        <div className="meeting-song">
+          <Field
+            label="Cântico inicial"
+            value={weekendFields.initialSong}
+            editing={editing}
+            onChange={(value) =>
+              setWeekendFields((current) => ({ ...current, initialSong: value }))
+            }
+          />
         </div>
       )}
 
@@ -216,7 +223,14 @@ export function MeetingTable({
                     />
                   )}
               </div>
-              {section.parts.map((part) => (
+              {payload.meeting.type === "weekend" && section.sectionKey === "publicTalk" && (
+                <div className="weekend-fields">
+                  <Field label="Tema do discurso" value={weekendFields.publicTalkTheme} editing={editing} onChange={(value) => setWeekendFields((current) => ({ ...current, publicTalkTheme: value }))} />
+                  <Field label="Nome do orador" value={weekendFields.publicSpeakerName} editing={editing} onChange={(value) => setWeekendFields((current) => ({ ...current, publicSpeakerName: value }))} />
+                  <Field label="Congregação do orador" value={weekendFields.publicSpeakerCongregation} editing={editing} onChange={(value) => setWeekendFields((current) => ({ ...current, publicSpeakerCongregation: value }))} />
+                </div>
+              )}
+              {!(payload.meeting.type === "weekend" && section.sectionKey === "publicTalk") && section.parts.map((part) => (
                 <div className="assignment-row" key={part.id}>
                   <div className="part-title">
                     <span className="block">{part.title}</span>
@@ -249,21 +263,39 @@ export function MeetingTable({
                     {part.slots.map((slot) => {
                       const key = `${part.partKey}:${slot.position}`;
                       return (
-                        <label key={slot.id} className="slot">
+                        <div key={slot.id} className="slot">
                           <span>{slot.label}</span>
                           {editing && part.assignable ? (
-                            <SearchableSelect
-                              options={participantSelectOptions}
-                              value={draftAssignments[key] ?? ""}
-                              placeholder="Buscar participante..."
-                              emptyMessage="Nenhum participante encontrado."
-                              onValueChange={(participantId) =>
-                                setDraftAssignments((current) => ({
-                                  ...current,
-                                  [key]: participantId,
-                                }))
-                              }
-                            />
+                            <div className="flex items-center gap-2">
+                              <div className="min-w-0 flex-1">
+                                <SearchableSelect
+                                  options={participantSelectOptions}
+                                  value={draftAssignments[key] ?? ""}
+                                  placeholder="Buscar participante..."
+                                  emptyMessage="Nenhum participante encontrado."
+                                  onValueChange={(participantId) =>
+                                    setDraftAssignments((current) => ({
+                                      ...current,
+                                      [key]: participantId,
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="shrink-0 text-destructive hover:text-destructive"
+                                disabled={!draftAssignments[key]}
+                                title={`Remover ${slot.label}`}
+                                aria-label={`Remover participante de ${slot.label}`}
+                                onClick={() =>
+                                  setDraftAssignments((current) => ({ ...current, [key]: "" }))
+                                }
+                              >
+                                <Trash2 />
+                              </Button>
+                            </div>
                           ) : (
                             <div className="flex flex-col items-start gap-1.5">
                               <strong>{slot.participant?.name ?? "Sem Designacao"}</strong>
@@ -275,7 +307,7 @@ export function MeetingTable({
                               )}
                             </div>
                           )}
-                        </label>
+                        </div>
                       );
                     })}
                   </div>

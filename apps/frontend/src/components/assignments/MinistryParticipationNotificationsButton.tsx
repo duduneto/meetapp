@@ -290,8 +290,8 @@ export function MinistryParticipationNotificationsButton({
             <div
               className={
                 result.ok
-                  ? "flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 p-3 text-sm"
-                  : "flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm"
+                  ? "flex items-start gap-2 rounded-lg border border-success/35 bg-success/15 p-3 text-sm"
+                  : "flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/18 p-3 text-sm"
               }
             >
               {result.ok ? (

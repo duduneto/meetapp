@@ -239,7 +239,7 @@ export function ParticipationPage() {
           </div>
 
           {assignments.length > 1 && (
-            <div className="flex items-start gap-3 rounded-xl border-2 border-warning bg-warning/10 p-4">
+            <div className="flex items-start gap-3 rounded-xl border-2 border-warning bg-warning/15 p-4">
               <ListChecks className="mt-0.5 size-6 shrink-0 text-warning" />
               <div>
                 <strong className="block text-base">
@@ -396,10 +396,10 @@ function ParticipationStatus({ status }: { status: AssignmentResponseStatus }) {
     <div
       className={
         confirmed
-          ? "flex items-center gap-2 rounded-lg border border-success/20 bg-success/10 px-3 py-2 text-sm font-medium text-success"
+          ? "flex items-center gap-2 rounded-lg border border-success/35 bg-success/15 px-3 py-2 text-sm font-medium text-success"
           : rejected
-            ? "flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive"
-            : "flex items-center gap-2 rounded-lg border border-warning/20 bg-warning/10 px-3 py-2 text-sm font-medium text-warning"
+            ? "flex items-center gap-2 rounded-lg border border-destructive/35 bg-destructive/15 px-3 py-2 text-sm font-medium text-destructive"
+            : "flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/18 px-3 py-2 text-sm font-medium text-warning"
       }
     >
       {confirmed ? (

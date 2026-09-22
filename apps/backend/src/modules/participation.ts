@@ -3,7 +3,8 @@ import { Router } from "express";
 import { z } from "zod";
 import {
   hashParticipationAccessCode,
-  isParticipationAccessCode
+  isParticipationAccessCode,
+  participationLinkIssuedAfter
 } from "../auth/participationAccessCode.js";
 import {
   participationTokenFromAuthorization,
@@ -161,6 +162,7 @@ function anchorWhere(claims: ParticipationTokenClaims) {
     id: claims.assignmentId,
     participantId: claims.participantId,
     participationTokenVersion: claims.version,
+    participationTokenIssuedAt: { gt: participationLinkIssuedAfter() },
     participant: { deletedAt: null }
   };
 }
@@ -170,6 +172,7 @@ participationRouter.post("/participation/session", async (req, res) => {
   const assignment = await prisma.assignment.findFirst({
     where: {
       participationAccessCodeHash: hashParticipationAccessCode(code),
+      participationTokenIssuedAt: { gt: participationLinkIssuedAfter() },
       participant: { deletedAt: null }
     },
     select: {
@@ -180,7 +183,9 @@ participationRouter.post("/participation/session", async (req, res) => {
   });
 
   if (!assignment) {
-    return res.status(401).json({ message: "Link de participacao invalido ou revogado." });
+    return res.status(401).json({
+      message: "Link de participacao invalido, expirado ou revogado."
+    });
   }
 
   const accessToken = signParticipationToken({

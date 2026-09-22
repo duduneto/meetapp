@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "@/api/client";
 import type { AssignmentPayload } from "@/api/types";
 import {
@@ -20,9 +20,21 @@ function meetingTypeParam(value: string | null): HierarchicalMeetingType | undef
   return value === "midweek" || value === "weekend" ? value : undefined;
 }
 
+async function exchangePublicCode(code: string) {
+  const session = await api<{ accessToken: string; expiresAt: string }>(
+    "/public/session",
+    {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    },
+  );
+  return session.accessToken;
+}
+
 export function PublicPage() {
+  const { code = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const token = searchParams.get("token") ?? "";
+  const legacyToken = searchParams.get("token") ?? "";
   const year = numberParam(searchParams.get("year"));
   const queryMonth = numberParam(searchParams.get("month"));
   const weekNumber = numberParam(searchParams.get("week"));
@@ -35,6 +47,7 @@ export function PublicPage() {
   const [loadingWeeks, setLoadingWeeks] = useState(false);
   const [loadingMeeting, setLoadingMeeting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
 
   const inferredMonth = payload
     ? new Date(payload.meeting.startAt).getUTCMonth() + 1
@@ -57,17 +70,41 @@ export function PublicPage() {
   );
 
   useEffect(() => {
-    if (!token) {
+    if (!code && !legacyToken) {
       setError("O link público está incompleto.");
+      setAccessToken(null);
       return;
     }
+
+    let active = true;
+    setError(null);
+    setAccessToken(null);
+    void (async () => {
+      try {
+        const token = code ? await exchangePublicCode(code) : legacyToken;
+        if (active) setAccessToken(token);
+      } catch (reason) {
+        if (active) {
+          setError(
+            reason instanceof Error ? reason.message : "Não foi possível abrir o link público.",
+          );
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [code, legacyToken]);
+
+  useEffect(() => {
+    if (!accessToken) return;
 
     let active = true;
     setLoadingMonths(true);
     setError(null);
     api<{ months: HierarchicalMonth[] }>(
-      `/public/assignment-months?token=${encodeURIComponent(token)}`,
-      { publicToken: token },
+      "/public/assignment-months",
+      { authToken: accessToken },
     )
       .then((response) => {
         if (active) setMonths(response.months);
@@ -83,10 +120,10 @@ export function PublicPage() {
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [accessToken]);
 
   useEffect(() => {
-    if (!token || !year || !month) {
+    if (!accessToken || !year || !month) {
       setWeeks([]);
       return;
     }
@@ -95,8 +132,8 @@ export function PublicPage() {
     setLoadingWeeks(true);
     setError(null);
     api<{ weeks: HierarchicalWeek[] }>(
-      `/public/assignment-months/${year}/${month}/weeks?token=${encodeURIComponent(token)}`,
-      { publicToken: token },
+      `/public/assignment-months/${year}/${month}/weeks`,
+      { authToken: accessToken },
     )
       .then((response) => {
         if (active) setWeeks(response.weeks);
@@ -112,10 +149,10 @@ export function PublicPage() {
     return () => {
       active = false;
     };
-  }, [month, token, year]);
+  }, [accessToken, month, year]);
 
   useEffect(() => {
-    if (!token || !year || !weekNumber || !type) {
+    if (!accessToken || !year || !weekNumber || !type) {
       setPayload(null);
       return;
     }
@@ -124,8 +161,8 @@ export function PublicPage() {
     setLoadingMeeting(true);
     setError(null);
     api<AssignmentPayload>(
-      `/public/assignments/${year}/${weekNumber}/${type}?token=${encodeURIComponent(token)}`,
-      { publicToken: token },
+      `/public/assignments/${year}/${weekNumber}/${type}`,
+      { authToken: accessToken },
     )
       .then((response) => {
         if (active) setPayload(response);
@@ -141,7 +178,7 @@ export function PublicPage() {
     return () => {
       active = false;
     };
-  }, [token, type, weekNumber, year]);
+  }, [accessToken, type, weekNumber, year]);
 
   useEffect(() => {
     if (!queryMonth && inferredMonth && year && weekNumber && type) {
@@ -159,7 +196,7 @@ export function PublicPage() {
     replace = false,
   ) {
     const next = new URLSearchParams();
-    if (token) next.set("token", token);
+    if (!code && legacyToken) next.set("token", legacyToken);
     if (selection.year) next.set("year", String(selection.year));
     if (selection.month) next.set("month", String(selection.month));
     if (selection.week) next.set("week", String(selection.week));

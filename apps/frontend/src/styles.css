@@ -24,9 +24,9 @@
   --muted-foreground: #68645c;
   --accent: #f0c45c;
   --accent-foreground: #17211b;
-  --destructive: #a93639;
-  --success: #15803d;
-  --warning: #a16207;
+  --destructive: #b42318;
+  --success: #16794a;
+  --warning: #b45309;
   --border: #f2f3ff;
   --input: #d4cec2;
   --ring: #3a8069;
@@ -361,7 +361,7 @@ body {
   display: grid;
   gap: 0.75rem;
   grid-template-columns: repeat(3, 1fr);
-  margin-bottom: 1rem;
+  padding: 0.85rem;
 }
 
 .meeting-song {

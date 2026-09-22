@@ -118,6 +118,7 @@ export type AssignmentPayload = {
     startAt: string;
     endAt: string;
     bibleReading?: string | null;
+    initialSong?: string | null;
     publicTalkTheme?: string | null;
     publicSpeakerName?: string | null;
     publicSpeakerCongregation?: string | null;

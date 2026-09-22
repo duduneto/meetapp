@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAdmin, requireAuth } from "../auth/middleware.js";
+import { generatePublicAccessCode } from "../auth/publicAccessCode.js";
 import { prisma } from "../lib/prisma.js";
 import { createSecret, hashSecret } from "../lib/secrets.js";
 
@@ -106,6 +107,7 @@ settingsRouter.post("/settings/public-tokens", requireAuth, requireAdmin, async 
       data: {
         congregationId: req.user!.congregationId,
         name: input.name,
+        accessCode: generatePublicAccessCode(),
         expiresAt,
         isDefault,
         createdByUserId: req.user!.id

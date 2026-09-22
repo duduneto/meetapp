@@ -37,7 +37,8 @@ const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
   { path: "/participation", element: <ParticipationPage /> },
   { path: "/participation/:code", element: <ParticipationPage /> },
-  { path: "/public", element: <PublicPage /> }
+  { path: "/public", element: <PublicPage /> },
+  { path: "/public/:code", element: <PublicPage /> }
 ]);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

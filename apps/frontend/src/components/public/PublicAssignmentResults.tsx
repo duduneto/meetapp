@@ -18,6 +18,11 @@ function getSectionHeaderClass(sectionKey: string) {
 }
 
 export function PublicAssignmentResults({ payload }: { payload: AssignmentPayload }) {
+  const initialSong =
+    payload.meeting.type === "weekend"
+      ? payload.meeting.initialSong
+      : payload.table.songs?.initial;
+
   return (
     <div className="space-y-3">
       {payload.meeting.bibleReading && (
@@ -32,22 +37,7 @@ export function PublicAssignmentResults({ payload }: { payload: AssignmentPayloa
         </Card>
       )}
 
-      {payload.meeting.type === "weekend" && (
-        <Card size="sm">
-          <CardHeader className={cn("border-b py-3", getSectionHeaderClass("publicTalk"))}>
-            <CardTitle className="text-inherit">Discurso público</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Detail label="Tema" value={payload.meeting.publicTalkTheme} />
-            <Detail label="Orador" value={payload.meeting.publicSpeakerName} />
-            <Detail label="Congregação" value={payload.meeting.publicSpeakerCongregation} />
-          </CardContent>
-        </Card>
-      )}
-
-      {payload.table.songs?.initial && (
-        <Song label="Cântico inicial" value={payload.table.songs.initial} />
-      )}
+      {initialSong && <Song label="Cântico inicial" value={initialSong} />}
 
       {payload.table.sections.map((section) => (
         <div key={section.id} className="space-y-3">
@@ -56,7 +46,16 @@ export function PublicAssignmentResults({ payload }: { payload: AssignmentPayloa
               <CardTitle className="text-inherit">{section.title}</CardTitle>
             </CardHeader>
             <CardContent className="divide-y px-4">
-              {section.parts.map((part) => (
+              {payload.meeting.type === "weekend" && section.sectionKey === "publicTalk" ? (
+                <div className="grid gap-3 py-4 sm:grid-cols-3">
+                  <Detail label="Tema do discurso" value={payload.meeting.publicTalkTheme} />
+                  <Detail label="Nome do orador" value={payload.meeting.publicSpeakerName} />
+                  <Detail
+                    label="Congregação do orador"
+                    value={payload.meeting.publicSpeakerCongregation}
+                  />
+                </div>
+              ) : section.parts.map((part) => (
                 <div key={part.id} className="space-y-3 py-4">
                   <strong className="block leading-snug">{part.title}</strong>
                   <div className="space-y-3">
