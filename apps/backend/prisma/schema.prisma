@@ -91,6 +91,8 @@ model Participant {
   gender         String?
   phone          String?
   whatsapp       String?
+  /// Allow-list of preferred meetings/sections/roles. null = unrestricted.
+  preferences    Json?
   deletedAt      DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt

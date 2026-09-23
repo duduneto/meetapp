@@ -34,7 +34,7 @@ export function AppShell() {
   const currentPage = links.find((link) => location.pathname.startsWith(link.to))?.label ?? "Varjotapp";
 
   return (
-    <SidebarProvider>
+    <SidebarProvider className="h-svh overflow-hidden">
       <Sidebar variant="inset" collapsible="icon" className="no-print">
         <SidebarHeader className="p-3">
           <div className="flex items-center gap-3 overflow-hidden px-1 py-2">
@@ -94,14 +94,14 @@ export function AppShell() {
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
-      <SidebarInset>
+      <SidebarInset className="min-h-0 overflow-hidden md:max-h-[calc(100svh-1rem)]">
         <header className="no-print flex h-14 shrink-0 items-center gap-3 border-b border-sidebar-border bg-background/90 px-4">
           <SidebarTrigger />
           <div className="h-4 w-px bg-border" />
           <span className="font-heading text-sm font-medium">{currentPage}</span>
         </header>
-        <main className="min-h-0 flex-1 p-4 md:p-6 lg:p-8">
-          <div className="h-full w-full">
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 md:p-6 lg:p-8">
+          <div className="min-h-0 flex-1 overflow-hidden">
             <Outlet />
           </div>
         </main>

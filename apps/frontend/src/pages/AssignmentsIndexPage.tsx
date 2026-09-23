@@ -139,18 +139,12 @@ export function AssignmentsIndexPage() {
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col">
-      <header className="mb-4 flex shrink-0 items-center justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-xl font-semibold">Designações</h1>
-          <p className="text-sm text-muted-foreground">Gerencie as semanas e reuniões.</p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <AssignmentsCatalogShareButton />
-          <AddWeekPopover onImported={handleImported} />
-        </div>
+    <section className="flex h-full min-h-0 flex-col overflow-hidden">
+      <header className="mb-4 flex shrink-0 items-center justify-end gap-2">
+        <AssignmentsCatalogShareButton />
+        <AddWeekPopover onImported={handleImported} />
       </header>
-      <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto">
+      <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overflow-y-hidden">
         <TemporalNavigationDrawer
           months={months}
           selectedMonth={selected}

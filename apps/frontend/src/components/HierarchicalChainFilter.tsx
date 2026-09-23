@@ -45,6 +45,7 @@ type HierarchicalChainFilterProps = {
   loading?: boolean;
   error?: string | null;
   results?: ReactNode;
+  headerAction?: ReactNode;
   onSelectMonth: (month: HierarchicalMonth) => void;
   onSelectWeek: (week: HierarchicalWeek) => void;
   onSelectType: (type: HierarchicalMeetingType) => void;
@@ -73,6 +74,7 @@ export function HierarchicalChainFilter({
   loading = false,
   error,
   results,
+  headerAction,
   onSelectMonth,
   onSelectWeek,
   onSelectType,
@@ -124,10 +126,13 @@ export function HierarchicalChainFilter({
             </AnimatePresence>
 
             {depth === 1 ? (
-              <div className="min-w-0 px-1">
-                <strong className="block font-heading text-base">Designações</strong>
-                <span className="block text-xs text-muted-foreground">Selecione um mês</span>
-              </div>
+              <>
+                <div className="min-w-0 flex-1 px-1">
+                  <strong className="block font-heading text-base">Designações</strong>
+                  <span className="block text-xs text-muted-foreground">Selecione um mês</span>
+                </div>
+                {headerAction}
+              </>
             ) : (
               <nav
                 aria-label="Filtros selecionados"

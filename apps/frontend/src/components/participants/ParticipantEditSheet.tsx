@@ -2,6 +2,7 @@ import { Loader2, Pencil, Save } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "@/api/client";
 import type { Participant } from "@/api/types";
+import { ParticipationPreferencesFields } from "@/components/participants/ParticipationPreferencesFields";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -14,12 +15,18 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  preferencesFormFromStored,
+  preferencesToPayload,
+  type PreferencesFormState,
+} from "@/lib/participationPreferences";
 
 type ParticipantForm = {
   name: string;
   gender: string;
   phone: string;
   whatsapp: string;
+  preferences: PreferencesFormState;
 };
 
 function formFromParticipant(participant: Participant): ParticipantForm {
@@ -28,6 +35,7 @@ function formFromParticipant(participant: Participant): ParticipantForm {
     gender: participant.gender ?? "",
     phone: participant.phone ?? "",
     whatsapp: participant.whatsapp ?? "",
+    preferences: preferencesFormFromStored(participant.preferences),
   };
 }
 
@@ -73,6 +81,7 @@ export function ParticipantEditSheet({
             gender: form.gender || null,
             phone: form.phone.trim() || null,
             whatsapp: form.whatsapp.trim() || null,
+            preferences: preferencesToPayload(form.preferences),
           }),
         },
       );
@@ -102,12 +111,12 @@ export function ParticipantEditSheet({
         <SheetHeader className="border-b">
           <SheetTitle>Editar participante</SheetTitle>
           <SheetDescription>
-            Atualize os dados de contato e as informações pessoais.
+            Atualize contato, dados pessoais e preferências de participação.
           </SheetDescription>
         </SheetHeader>
 
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={save}>
-          <div className="grid gap-4 overflow-y-auto px-4">
+          <div className="grid gap-4 overflow-y-auto px-4 pb-2">
             <label className="grid gap-1.5 text-sm font-medium">
               Nome
               <Input
@@ -152,6 +161,11 @@ export function ParticipantEditSheet({
                 onChange={(event) => setForm((current) => ({ ...current, whatsapp: event.target.value }))}
               />
             </label>
+
+            <ParticipationPreferencesFields
+              value={form.preferences}
+              onChange={(preferences) => setForm((current) => ({ ...current, preferences }))}
+            />
 
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>

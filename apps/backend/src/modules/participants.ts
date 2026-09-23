@@ -1,7 +1,12 @@
+import { Prisma } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { requireAdmin, requireAuth, requireWrite } from "../auth/middleware.js";
 import { prisma } from "../lib/prisma.js";
+import {
+  normalizeParticipationPreferences,
+  participationPreferencesSchema
+} from "./participationPreferences.js";
 
 export const participantsRouter = Router();
 
@@ -9,7 +14,8 @@ const participantSchema = z.object({
   name: z.string().min(1),
   gender: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
-  whatsapp: z.string().nullable().optional()
+  whatsapp: z.string().nullable().optional(),
+  preferences: participationPreferencesSchema.optional()
 });
 
 const bulkParticipantSchema = z
@@ -33,6 +39,14 @@ const participantAssignmentsQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
   limit: z.coerce.number().int().min(1).max(100).default(25)
 });
+
+function preferencesJson(
+  preferences: z.infer<typeof participationPreferencesSchema> | undefined
+): Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined {
+  if (preferences === undefined) return undefined;
+  const normalized = normalizeParticipationPreferences(preferences);
+  return normalized === null ? Prisma.JsonNull : (normalized as Prisma.InputJsonValue);
+}
 
 participantsRouter.get("/participants", requireAuth, async (req, res) => {
   const includeDeleted = req.query.deleted === "true";
@@ -169,17 +183,27 @@ participantsRouter.post(
 
 participantsRouter.post("/participants", requireAuth, requireWrite, async (req, res) => {
   const input = participantSchema.parse(req.body);
+  const { preferences, ...fields } = input;
   const participant = await prisma.participant.create({
-    data: { ...input, congregationId: req.user!.congregationId }
+    data: {
+      ...fields,
+      preferences: preferencesJson(preferences) ?? Prisma.JsonNull,
+      congregationId: req.user!.congregationId
+    }
   });
   res.status(201).json({ participant });
 });
 
 participantsRouter.put("/participants/:id", requireAuth, requireWrite, async (req, res) => {
   const input = participantSchema.parse(req.body);
+  const { preferences, ...fields } = input;
+  const data: Prisma.ParticipantUpdateInput = { ...fields };
+  const json = preferencesJson(preferences);
+  if (json !== undefined) data.preferences = json;
+
   const participant = await prisma.participant.update({
     where: { id: req.params.id, congregationId: req.user!.congregationId },
-    data: input
+    data
   });
   res.json({ participant });
 });

@@ -6,6 +6,11 @@ import { prisma } from "../lib/prisma.js";
 import { verifySecret } from "../lib/secrets.js";
 import { verifyPublicAccessToken } from "../auth/publicAccessJwt.js";
 import { buildAssignmentPayload } from "./assignments.js";
+import {
+  findParticipantAssignmentHistory,
+  participantAssignmentHistoryQuerySchema,
+  publicParticipantSearchQuerySchema
+} from "./participantAssignmentHistory.js";
 
 export const publicRouter = Router();
 
@@ -122,4 +127,48 @@ publicRouter.get("/public/assignments/:year/:week/:type", async (req, res) => {
   );
   if (!payload) return res.status(404).json({ message: "Reuniao nao encontrada." });
   res.json(payload);
+});
+
+publicRouter.get("/public/participants", async (req, res) => {
+  const { search, limit } = publicParticipantSearchQuerySchema.parse(req.query);
+  const participants = await prisma.participant.findMany({
+    where: {
+      congregationId: res.locals.congregationId,
+      deletedAt: null,
+      ...(search ? { name: { contains: search, mode: "insensitive" } } : {}),
+      assignments: { some: {} }
+    },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+    take: limit,
+    select: { id: true, name: true }
+  });
+  res.json({ participants });
+});
+
+publicRouter.get("/public/participants/:participantId/assignments", async (req, res) => {
+  const query = participantAssignmentHistoryQuerySchema.parse(req.query);
+  const participant = await prisma.participant.findFirst({
+    where: {
+      id: req.params.participantId,
+      congregationId: res.locals.congregationId,
+      deletedAt: null
+    },
+    select: { id: true, name: true }
+  });
+  if (!participant) {
+    return res.status(404).json({ message: "Participante nao encontrado." });
+  }
+
+  const assignments = await findParticipantAssignmentHistory({
+    participantId: participant.id,
+    congregationId: res.locals.congregationId,
+    period: query.period,
+    limit: query.limit
+  });
+
+  res.json({
+    participant,
+    period: query.period,
+    assignments: assignments.map(({ meetingId: _meetingId, ...assignment }) => assignment)
+  });
 });

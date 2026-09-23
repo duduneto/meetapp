@@ -254,6 +254,28 @@ async function sendParticipantSuggestions(
     ) AS last_assignment ON TRUE
     WHERE participant."congregationId" = ${congregationId}
       AND participant."deletedAt" IS NULL
+      AND (
+        participant."preferences" IS NULL
+        OR (
+          COALESCE((participant."preferences" #>> '{midweek,enabled}')::boolean, false) = true
+          AND (
+            participant."preferences" #> '{midweek,sections}' IS NULL
+            OR participant."preferences" #> '{midweek,sections}' = '{}'::jsonb
+            OR (
+              COALESCE(
+                (participant."preferences" #>> '{midweek,sections,ministery,enabled}')::boolean,
+                false
+              ) = true
+              AND (
+                participant."preferences" #> '{midweek,sections,ministery,roles}' IS NULL
+                OR jsonb_typeof(participant."preferences" #> '{midweek,sections,ministery,roles}') <> 'array'
+                OR jsonb_array_length(participant."preferences" #> '{midweek,sections,ministery,roles}') = 0
+                OR participant."preferences" #> '{midweek,sections,ministery,roles}' @> ${JSON.stringify([role])}::jsonb
+              )
+            )
+          )
+        )
+      )
     ORDER BY
       last_assignment."startAt" ASC NULLS FIRST,
       participant."name" ASC,

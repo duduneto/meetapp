@@ -8,12 +8,39 @@ export type Session = {
   };
 };
 
+export type ParticipationRoleKey =
+  | "president"
+  | "speaker"
+  | "indicator"
+  | "attendant"
+  | "designated"
+  | "publisher"
+  | "assistant"
+  | "conductor"
+  | "reader";
+
+export type ParticipationSectionPreference = {
+  enabled: boolean;
+  roles?: ParticipationRoleKey[];
+};
+
+export type ParticipationMeetingPreference = {
+  enabled: boolean;
+  sections?: Partial<Record<string, ParticipationSectionPreference>>;
+};
+
+export type ParticipationPreferences = {
+  midweek?: ParticipationMeetingPreference;
+  weekend?: ParticipationMeetingPreference;
+} | null;
+
 export type Participant = {
   id: string;
   name: string;
   gender?: string | null;
   phone?: string | null;
   whatsapp?: string | null;
+  preferences?: ParticipationPreferences;
   deletedAt?: string | null;
 };
 
@@ -89,6 +116,34 @@ export type ParticipationPayload = {
     }>;
   }>;
   publicMeetingLink: string | null;
+};
+
+export type PublicParticipant = {
+  id: string;
+  name: string;
+};
+
+export type ParticipantAssignmentSummary = {
+  id: string;
+  status: AssignmentResponseStatus;
+  meeting: {
+    type: "midweek" | "weekend";
+    year: number;
+    month: number;
+    week: number;
+    startAt: string;
+    endAt: string;
+  };
+  section: { key: string; title: string };
+  part: { key: string; title: string };
+  slot: { position: number; label: string };
+  publicMeetingLink?: string | null;
+};
+
+export type ParticipantAssignmentHistory = {
+  participant: PublicParticipant;
+  period: "upcoming" | "past";
+  assignments: ParticipantAssignmentSummary[];
 };
 
 export type MeetingActivity = {

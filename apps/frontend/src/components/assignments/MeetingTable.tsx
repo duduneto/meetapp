@@ -97,7 +97,7 @@ export function MeetingTable({
   }
 
   return (
-    <Card className={cn("min-h-0 overflow-hidden py-0 print:ring-0", className)}>
+    <Card className={cn("flex h-full min-h-0 flex-col gap-0 overflow-hidden py-0 print:ring-0", className)}>
       <CardHeader className="no-print shrink-0 border-b bg-card py-4 has-data-[slot=card-action]:grid-cols-1">
         <div className="flex w-full min-w-0 flex-col gap-3 @min-[640px]/card-header:flex-row @min-[640px]/card-header:items-start @min-[640px]/card-header:justify-between">
           <div className="flex min-w-0 items-start gap-2">
@@ -160,7 +160,7 @@ export function MeetingTable({
         </div>
       </CardHeader>
 
-      <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
+      <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pb-4">
 
       {payload.meeting.bibleReading && <div className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground">Leitura da semana: <strong>{payload.meeting.bibleReading}</strong></div>}
 

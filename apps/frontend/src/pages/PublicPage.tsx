@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "@/api/client";
-import type { AssignmentPayload } from "@/api/types";
+import type { AssignmentPayload, ParticipantAssignmentSummary } from "@/api/types";
 import {
   HierarchicalChainFilter,
   type HierarchicalMeetingType,
@@ -9,6 +9,7 @@ import {
   type HierarchicalWeek,
 } from "@/components/HierarchicalChainFilter";
 import { PublicAssignmentResults } from "@/components/public/PublicAssignmentResults";
+import { ParticipantAssignmentsSheet } from "@/components/public/ParticipantAssignmentsSheet";
 
 function numberParam(value: string | null) {
   if (!value) return undefined;
@@ -222,6 +223,23 @@ export function PublicPage() {
                 : false
         }
         error={error}
+        headerAction={
+          accessToken ? (
+            <ParticipantAssignmentsSheet
+              accessToken={accessToken}
+              triggerLabel="Por participante"
+              triggerClassName="h-9"
+              onOpenMeeting={(assignment: ParticipantAssignmentSummary) =>
+                setSelection({
+                  year: assignment.meeting.year,
+                  month: assignment.meeting.month,
+                  week: assignment.meeting.week,
+                  type: assignment.meeting.type,
+                })
+              }
+            />
+          ) : null
+        }
         results={
           loadingMeeting ? (
             <p className="p-8 text-center text-sm text-muted-foreground">Carregando designações...</p>

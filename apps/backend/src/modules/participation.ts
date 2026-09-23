@@ -13,7 +13,15 @@ import {
   verifyParticipationToken
 } from "../auth/participationJwt.js";
 import { prisma } from "../lib/prisma.js";
-import { buildPublicMeetingLink } from "../lib/publicLinks.js";
+import {
+  buildPublicMeetingLink,
+  findActiveDefaultPublicToken,
+  publicAssignmentsLinkFromCode
+} from "../lib/publicLinks.js";
+import {
+  findParticipantAssignmentHistory,
+  participantAssignmentHistoryQuerySchema
+} from "./participantAssignmentHistory.js";
 
 export const participationRouter = Router();
 
@@ -211,6 +219,42 @@ participationRouter.get("/participation", async (req, res) => {
   }
 
   res.json(await participationPayload(anchor));
+});
+
+participationRouter.get("/participation/assignments", async (req, res) => {
+  const claims = claimsFromAuthorization(req.header("authorization"));
+  if (!claims) return res.status(401).json({ message: "Token de participacao invalido." });
+  const query = participantAssignmentHistoryQuerySchema.parse(req.query);
+
+  const anchor = await prisma.assignment.findFirst({
+    where: anchorWhere(claims),
+    include: participationAssignmentInclude
+  });
+  if (!anchor) {
+    return res.status(409).json({ message: "A designacao nao esta mais disponivel." });
+  }
+
+  const anchorMeeting = anchor.meetingPartSlot.meetingPart.meetingSection.meeting;
+  const congregationId = anchorMeeting.meetingWeek.congregationId;
+  const assignments = await findParticipantAssignmentHistory({
+    participantId: anchor.participantId,
+    congregationId,
+    period: query.period,
+    limit: query.limit,
+    excludeMeetingId: anchorMeeting.id
+  });
+  const publicToken = await findActiveDefaultPublicToken(congregationId);
+
+  res.json({
+    participant: { id: anchor.participant.id, name: anchor.participant.name },
+    period: query.period,
+    assignments: assignments.map(({ meetingId: _meetingId, ...assignment }) => ({
+      ...assignment,
+      publicMeetingLink: publicToken?.accessCode
+        ? publicAssignmentsLinkFromCode(publicToken.accessCode, assignment.meeting).toString()
+        : null
+    }))
+  });
 });
 
 participationRouter.post("/participation/response", async (req, res) => {

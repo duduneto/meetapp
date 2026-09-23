@@ -142,8 +142,8 @@ export function ParticipantSuggestionsPopover({
         <div className="space-y-1 border-b px-4 py-3">
           <PopoverTitle>Sugestões de participantes</PopoverTitle>
           <PopoverDescription>
-            Quem nunca participou aparece primeiro, seguido pelas participações
-            mais antigas.
+            Filtra por preferências de participação. Quem nunca participou
+            aparece primeiro, seguido pelas participações mais antigas.
           </PopoverDescription>
           <RadioButtonGroup
             value={role}
@@ -168,7 +168,7 @@ export function ParticipantSuggestionsPopover({
 
           {initialized && suggestions.length === 0 && !error && (
             <p className="px-4 py-6 text-sm text-muted-foreground">
-              Nenhum participante disponível.
+              Nenhum participante com preferência compatível para esta função.
             </p>
           )}
 

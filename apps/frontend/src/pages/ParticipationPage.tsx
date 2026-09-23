@@ -30,6 +30,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { ParticipantAssignmentsSheet } from "@/components/public/ParticipantAssignmentsSheet";
 
 type ParticipationAssignment = ParticipationPayload["assignments"][number];
 
@@ -237,6 +238,15 @@ export function ParticipationPage() {
               value={formatDateRange(meeting.startAt, meeting.endAt)}
             />
           </div>
+
+          {token && (
+            <ParticipantAssignmentsSheet
+              accessToken={token}
+              participant={participant}
+              triggerLabel="Ver outras participações"
+              triggerClassName="w-full"
+            />
+          )}
 
           {assignments.length > 1 && (
             <div className="flex items-start gap-3 rounded-xl border-2 border-warning bg-warning/15 p-4">
