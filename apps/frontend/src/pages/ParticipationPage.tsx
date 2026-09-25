@@ -228,26 +228,6 @@ export function ParticipationPage() {
           </CardAction>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="grid gap-3 rounded-xl bg-muted p-4 sm:grid-cols-2">
-            <Detail
-              label="Reunião"
-              value={meeting.type === "midweek" ? "Meio de Semana" : "Fim de Semana"}
-            />
-            <Detail
-              label="Período"
-              value={formatDateRange(meeting.startAt, meeting.endAt)}
-            />
-          </div>
-
-          {token && (
-            <ParticipantAssignmentsSheet
-              accessToken={token}
-              participant={participant}
-              triggerLabel="Ver outras participações"
-              triggerClassName="w-full"
-            />
-          )}
-
           {assignments.length > 1 && (
             <div className="flex items-start gap-3 rounded-xl border-2 border-warning bg-warning/15 p-4">
               <ListChecks className="mt-0.5 size-6 shrink-0 text-warning" />
@@ -271,6 +251,7 @@ export function ParticipationPage() {
               <ParticipationAssignmentCard
                 key={assignment.id}
                 assignment={assignment}
+                meeting={meeting}
                 index={index}
                 total={assignments.length}
                 open={openAssignmentId === assignment.id}
@@ -280,6 +261,15 @@ export function ParticipationPage() {
               />
             ))}
           </div>
+
+          {token && (
+            <ParticipantAssignmentsSheet
+              accessToken={token}
+              participant={participant}
+              triggerLabel="Ver outras participações"
+              triggerClassName="w-full"
+            />
+          )}
         </CardContent>
       </Card>
     </ParticipationShell>
@@ -288,6 +278,7 @@ export function ParticipationPage() {
 
 function ParticipationAssignmentCard({
   assignment,
+  meeting,
   index,
   total,
   open,
@@ -296,6 +287,7 @@ function ParticipationAssignmentCard({
   onRespond,
 }: {
   assignment: ParticipationAssignment;
+  meeting: ParticipationPayload["meeting"];
   index: number;
   total: number;
   open: boolean;
@@ -334,29 +326,11 @@ function ParticipationAssignmentCard({
 
         <CollapsibleContent>
           <div className="space-y-4 border-t p-4">
-            {total > 1 && (
-              <p className="text-xs font-medium text-muted-foreground">
-                Participação {index + 1} de {total}
-              </p>
-            )}
-            <div className="grid gap-3 rounded-xl bg-muted p-4 sm:grid-cols-2">
-              <Detail label="Seção" value={assignment.section.title} />
-              <Detail label="Parte" value={assignment.part.title} />
-              <Detail label="Função" value={assignment.slot.label} />
-              {(assignment.companions ?? []).map((companion) => (
-                <Detail
-                  key={`${companion.position}:${companion.label}`}
-                  label={companion.label}
-                  value={companion.participant?.name ?? "Sem designação"}
-                />
-              ))}
-            </div>
-
-            <ParticipationStatus status={assignment.status} />
-
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Button
                 type="button"
+                size="lg"
+                className="h-11 text-base"
                 onClick={() => onRespond("REJECTED")}
                 disabled={saving !== null}
                 variant="destructive"
@@ -370,6 +344,8 @@ function ParticipationAssignmentCard({
               </Button>
               <Button
                 type="button"
+                size="lg"
+                className="h-11 text-base"
                 onClick={() => onRespond("CONFIRMED")}
                 disabled={saving !== null}
                 variant="default"
@@ -381,6 +357,38 @@ function ParticipationAssignmentCard({
                     ? "Confirmado"
                     : "Confirmar"}
               </Button>
+            </div>
+
+            <ParticipationStatus status={assignment.status} />
+
+            {total > 1 && (
+              <p className="text-xs font-medium text-muted-foreground">
+                Participação {index + 1} de {total}
+              </p>
+            )}
+
+            <div className="grid gap-3 rounded-xl bg-muted p-4 sm:grid-cols-2">
+              <Detail
+                label="Reunião"
+                value={meeting.type === "midweek" ? "Meio de Semana" : "Fim de Semana"}
+              />
+              <Detail
+                label="Período"
+                value={formatDateRange(meeting.startAt, meeting.endAt)}
+              />
+            </div>
+
+            <div className="grid gap-3 rounded-xl bg-muted p-4 sm:grid-cols-2">
+              <Detail label="Seção" value={assignment.section.title} />
+              <Detail label="Parte" value={assignment.part.title} />
+              <Detail label="Função" value={assignment.slot.label} />
+              {(assignment.companions ?? []).map((companion) => (
+                <Detail
+                  key={`${companion.position}:${companion.label}`}
+                  label={companion.label}
+                  value={companion.participant?.name ?? "Sem designação"}
+                />
+              ))}
             </div>
           </div>
         </CollapsibleContent>

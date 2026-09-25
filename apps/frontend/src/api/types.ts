@@ -40,7 +40,39 @@ export type Participant = {
   gender?: string | null;
   phone?: string | null;
   whatsapp?: string | null;
+  congregationId?: string;
+  congregation?: { id: string; name: string } | null;
   preferences?: ParticipationPreferences;
+  deletedAt?: string | null;
+};
+
+export type PublicSpeakTheme = {
+  id: string;
+  number: number;
+  title: string;
+  fullTitle: string;
+  sanitizedFullTitle: string;
+  documentId?: string | null;
+  path?: string | null;
+  deletedAt?: string | null;
+};
+
+export type PublicSpeaker = {
+  id: string;
+  name: string;
+  sanitizedName: string;
+  congregationId: string;
+  hostCongregationId: string;
+  phone: string;
+  whatsapp: string;
+  deletedAt?: string | null;
+  congregation?: { id: string; name: string; deletedAt?: string | null } | null;
+};
+
+export type CongregationListItem = {
+  id: string;
+  name: string;
+  sanitizedName: string;
   deletedAt?: string | null;
 };
 
@@ -174,9 +206,6 @@ export type AssignmentPayload = {
     endAt: string;
     bibleReading?: string | null;
     initialSong?: string | null;
-    publicTalkTheme?: string | null;
-    publicSpeakerName?: string | null;
-    publicSpeakerCongregation?: string | null;
   };
   table: {
     songs?: {
@@ -207,6 +236,20 @@ export type AssignmentPayload = {
             name: string;
             deletedAt?: string | null;
             hasWhatsapp: boolean;
+            congregationId?: string;
+            congregation?: { id: string; name: string } | null;
+          } | null;
+          publicSpeaker: {
+            id: string;
+            name: string;
+            phone: string;
+            congregation: { id: string; name: string } | null;
+          } | null;
+          publicSpeakTheme: {
+            id: string;
+            number: number;
+            title: string;
+            fullTitle: string;
           } | null;
         }>;
       }>;

@@ -12,13 +12,16 @@ import { sendWhatsAppMessages } from "../lib/whatsappGateway.js";
 
 export const participationNotificationsRouter = Router();
 
-const NOTIFIABLE_MIDWEEK_SECTION_KEYS = new Set([
-  "midweekOpening",
-  "treasures",
-  "ministery",
-  "christianLife",
-  "midweekClosing"
-]);
+const NOTIFIABLE_SECTION_KEYS_BY_TYPE: Record<"midweek" | "weekend", Set<string>> = {
+  midweek: new Set([
+    "midweekOpening",
+    "treasures",
+    "ministery",
+    "christianLife",
+    "midweekClosing"
+  ]),
+  weekend: new Set(["weekendOpening", "publicTalk", "watchtower"])
+};
 
 export function isValidDateOnly(value: string) {
   const parsed = new Date(`${value}T12:00:00.000Z`);
@@ -45,9 +48,11 @@ type NotificationMessageInput = {
   participantName: string;
   meetingDate: Date;
   timezone: string;
+  meetingType: "midweek" | "weekend";
   sectionTitle: string;
   partTitle: string;
   slotLabel: string;
+  themeTitle?: string | null;
   companions: Array<{ label: string; name: string }>;
   link: string;
   isReminder: boolean;
@@ -66,15 +71,18 @@ export function createParticipationNotificationMessage(input: NotificationMessag
     year: "numeric",
     timeZone: input.timezone
   }).format(input.meetingDate);
+  const meetingLabel =
+    input.meetingType === "weekend" ? "fim de semana" : "meio de semana";
   const companionLines = input.companions
     .map((companion) => `${companion.label}: ${companion.name}`)
     .join("\n");
   const headline = input.isReminder
-    ? `⏰ *Lembrete da sua designação* na reunião do meio de semana de ${formattedDate}.`
-    : `🎉 *Você recebeu uma designação* na reunião do meio de semana de ${formattedDate}.`;
+    ? `⏰ *Lembrete da sua designação* na reunião do ${meetingLabel} de ${formattedDate}.`
+    : `🎉 *Você recebeu uma designação* na reunião do ${meetingLabel} de ${formattedDate}.`;
   const confirmationRequest = input.isReminder
     ? "Ainda estamos aguardando sua resposta. Por favor, confirme se poderá participar pelo link:"
     : "Confirme se poderá participar pelo link:";
+  const themeLine = input.themeTitle ? `Tema: *${input.themeTitle}*` : "";
 
   return [
     `Olá, ${input.participantName}! Tudo bem?`,
@@ -84,6 +92,7 @@ export function createParticipationNotificationMessage(input: NotificationMessag
     `\`${input.sectionTitle}\``,
     `Parte: ${input.partTitle}`,
     `Função: \`${input.slotLabel}\``,
+    themeLine,
     companionLines,
     "",
     confirmationRequest,
@@ -96,19 +105,21 @@ export function createParticipationNotificationMessage(input: NotificationMessag
 }
 
 participationNotificationsRouter.post(
-  "/assignments/:year/:week/midweek/sections/:sectionKey/participation-notifications",
+  "/assignments/:year/:week/:type/sections/:sectionKey/participation-notifications",
   requireAuth,
   requireWrite,
   async (req, res) => {
     const input = participationNotificationRequestSchema.parse(req.body ?? {});
     const congregationId = req.user!.congregationId;
     const sectionKey = req.params.sectionKey;
-    if (!NOTIFIABLE_MIDWEEK_SECTION_KEYS.has(sectionKey)) {
+    const meetingType = z.enum(["midweek", "weekend"]).parse(req.params.type);
+    const allowedSections = NOTIFIABLE_SECTION_KEYS_BY_TYPE[meetingType];
+    if (!allowedSections.has(sectionKey)) {
       return res.status(400).json({ message: "Esta secao nao permite envio de confirmacoes." });
     }
     const meeting = await prisma.meeting.findFirst({
       where: {
-        type: "midweek",
+        type: meetingType,
         meetingWeek: {
           congregationId,
           year: Number(req.params.year),
@@ -133,6 +144,7 @@ participationNotificationsRouter.post(
                     assignment: {
                       include: {
                         participant: true,
+                        publicSpeakTheme: true,
                         participationNotifications: {
                           orderBy: { createdAt: "desc" },
                           take: 1
@@ -187,6 +199,7 @@ participationNotificationsRouter.post(
       tokenVersion: number;
       partTitle: string;
       slotLabel: string;
+      themeTitle: string | null;
       companions: Array<{ label: string; name: string }>;
       isReminder: boolean;
     }> = [];
@@ -194,7 +207,7 @@ participationNotificationsRouter.post(
     for (const part of section.parts) {
       for (const slot of part.slots) {
         const assignment = slot.assignment;
-        if (!assignment) continue;
+        if (!assignment?.participant || !assignment.participantId) continue;
         if (requestedAssignmentIds && !requestedAssignmentIds.has(assignment.id)) continue;
         foundAssignmentIds.add(assignment.id);
 
@@ -249,6 +262,7 @@ participationNotificationsRouter.post(
           continue;
         }
 
+        const isPublicTalk = part.partKey === "public_talk";
         candidates.push({
           assignmentId: assignment.id,
           participantId: assignment.participantId,
@@ -256,12 +270,13 @@ participationNotificationsRouter.post(
           whatsapp,
           tokenVersion: assignment.participationTokenVersion,
           partTitle: part.title,
-          slotLabel: slot.label,
+          slotLabel: isPublicTalk ? "Orador" : slot.label,
+          themeTitle: isPublicTalk ? (assignment.publicSpeakTheme?.fullTitle ?? null) : null,
           isReminder: hasAlreadyReceived,
           companions: part.slots
             .filter((candidateSlot) => candidateSlot.id !== slot.id)
             .flatMap((candidateSlot) =>
-              candidateSlot.assignment
+              candidateSlot.assignment?.participant
                 ? [{ label: candidateSlot.label, name: candidateSlot.assignment.participant.name }]
                 : []
             )
@@ -335,9 +350,11 @@ participationNotificationsRouter.post(
             participantName: candidate.participantName,
             meetingDate,
             timezone,
+            meetingType,
             sectionTitle: section.title,
             partTitle: candidate.partTitle,
             slotLabel: candidate.slotLabel,
+            themeTitle: candidate.themeTitle,
             companions: candidate.companions,
             link,
             isReminder: candidate.isReminder

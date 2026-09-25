@@ -48,12 +48,26 @@ export function PublicAssignmentResults({ payload }: { payload: AssignmentPayloa
             <CardContent className="divide-y px-4">
               {payload.meeting.type === "weekend" && section.sectionKey === "publicTalk" ? (
                 <div className="grid gap-3 py-4 sm:grid-cols-3">
-                  <Detail label="Tema do discurso" value={payload.meeting.publicTalkTheme} />
-                  <Detail label="Nome do orador" value={payload.meeting.publicSpeakerName} />
-                  <Detail
-                    label="Congregação do orador"
-                    value={payload.meeting.publicSpeakerCongregation}
-                  />
+                  {(() => {
+                    const publicTalkPart = section.parts.find((part) => part.partKey === "public_talk");
+                    const slot = publicTalkPart?.slots[0];
+                    const speakerName =
+                      slot?.participant?.name ?? slot?.publicSpeaker?.name ?? null;
+                    const congregationName =
+                      slot?.publicSpeaker?.congregation?.name ??
+                      slot?.participant?.congregation?.name ??
+                      null;
+                    return (
+                      <>
+                        <Detail
+                          label="Tema do discurso"
+                          value={slot?.publicSpeakTheme?.fullTitle}
+                        />
+                        <Detail label="Nome do orador" value={speakerName} />
+                        <Detail label="Congregação do orador" value={congregationName} />
+                      </>
+                    );
+                  })()}
                 </div>
               ) : section.parts.map((part) => (
                 <div key={part.id} className="space-y-3 py-4">

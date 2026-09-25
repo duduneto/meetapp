@@ -57,7 +57,7 @@ export const weekendStructure: StructureSection[] = [
   {
     sectionKey: "publicTalk",
     title: "Discurso publico",
-    parts: [{ partKey: "public_talk", title: "Orador visitante", assignable: false, slots: [] }]
+    parts: [{ partKey: "public_talk", title: "Orador visitante", slots: ["Orador"] }]
   },
   {
     sectionKey: "watchtower",
@@ -212,5 +212,37 @@ export async function createMeetingStructure(
         });
       }
     }
+  }
+}
+
+/** Backfill assignable public_talk slot for weekend meetings created before this change. */
+export async function ensurePublicTalkSlot(
+  tx: Pick<PrismaClient, "meetingPart" | "meetingPartSlot">,
+  meetingId: string
+) {
+  const part = await tx.meetingPart.findFirst({
+    where: {
+      partKey: "public_talk",
+      meetingSection: { meetingId, sectionKey: "publicTalk" }
+    },
+    include: { slots: { orderBy: { position: "asc" } } }
+  });
+  if (!part) return;
+
+  if (!part.assignable) {
+    await tx.meetingPart.update({
+      where: { id: part.id },
+      data: { assignable: true }
+    });
+  }
+
+  if (part.slots.length === 0) {
+    await tx.meetingPartSlot.create({
+      data: {
+        meetingPartId: part.id,
+        position: 1,
+        label: "Orador"
+      }
+    });
   }
 }

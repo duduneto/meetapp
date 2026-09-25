@@ -17,6 +17,7 @@ test("creates a participation message with role, companion and link", () => {
     participantName: "Maria",
     meetingDate: new Date("2026-09-23T03:00:00.000Z"),
     timezone: "America/Fortaleza",
+    meetingType: "midweek",
     sectionTitle: "FAÇA SEU MELHOR NO MINISTÉRIO",
     partTitle: "4. Iniciando conversas",
     slotLabel: "Publicador",
@@ -26,9 +27,30 @@ test("creates a participation message with role, companion and link", () => {
   });
 
   assert.match(message, /quarta-feira, 23\/09\/2026/u);
+  assert.match(message, /meio de semana/u);
   assert.match(message, /Função: `Publicador`/u);
   assert.match(message, /Ajudante: Joana/u);
   assert.match(message, /https:\/\/example\.com\/participation\/code/u);
+});
+
+test("creates a weekend public talk message with theme and Orador role", () => {
+  const message = createParticipationNotificationMessage({
+    participantName: "Carlos",
+    meetingDate: new Date("2026-09-26T03:00:00.000Z"),
+    timezone: "America/Fortaleza",
+    meetingType: "weekend",
+    sectionTitle: "Discurso publico",
+    partTitle: "Orador visitante",
+    slotLabel: "Orador",
+    themeTitle: "1 - Você conhece bem a Deus?",
+    companions: [],
+    link: "https://example.com/participation/code",
+    isReminder: false
+  });
+
+  assert.match(message, /fim de semana/u);
+  assert.match(message, /Função: `Orador`/u);
+  assert.match(message, /Tema: \*1 - Você conhece bem a Deus\?\*/u);
 });
 
 test("creates a reminder message when the participant has already received a link", () => {
@@ -36,6 +58,7 @@ test("creates a reminder message when the participant has already received a lin
     participantName: "Maria",
     meetingDate: new Date("2026-09-23T03:00:00.000Z"),
     timezone: "America/Fortaleza",
+    meetingType: "midweek",
     sectionTitle: "FAÇA SEU MELHOR NO MINISTÉRIO",
     partTitle: "4. Iniciando conversas",
     slotLabel: "Publicador",

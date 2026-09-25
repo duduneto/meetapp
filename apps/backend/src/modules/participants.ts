@@ -55,6 +55,9 @@ participantsRouter.get("/participants", requireAuth, async (req, res) => {
       congregationId: req.user!.congregationId,
       deletedAt: includeDeleted ? { not: null } : null
     },
+    include: {
+      congregation: { select: { id: true, name: true } }
+    },
     orderBy: { name: "asc" }
   });
   res.json({ participants });

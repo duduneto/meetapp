@@ -1,18 +1,65 @@
 import "dotenv/config";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { createSecret, hashSecret } from "../src/lib/secrets.js";
+import { sanitizeSearchText } from "../src/lib/textSanitize.js";
 
 const prisma = new PrismaClient();
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+type ThemeSeed = {
+  number: number;
+  title: string;
+  documentId?: string;
+  path?: string;
+};
+
+async function seedPublicSpeakThemes() {
+  const raw = readFileSync(join(__dirname, "data/discursos_publicos.json"), "utf8");
+  const themes = JSON.parse(raw) as ThemeSeed[];
+
+  for (const theme of themes) {
+    const fullTitle = `${theme.number} - ${theme.title}`;
+    await prisma.publicSpeakTheme.upsert({
+      where: { number: theme.number },
+      update: {
+        title: theme.title,
+        fullTitle,
+        sanitizedFullTitle: sanitizeSearchText(fullTitle),
+        documentId: theme.documentId ?? null,
+        path: theme.path ?? null,
+        deletedAt: null
+      },
+      create: {
+        number: theme.number,
+        title: theme.title,
+        fullTitle,
+        sanitizedFullTitle: sanitizeSearchText(fullTitle),
+        documentId: theme.documentId ?? null,
+        path: theme.path ?? null
+      }
+    });
+  }
+
+  console.log(`Temas de discurso publico: ${themes.length} upserted.`);
+}
 
 async function main() {
   const anonymousToken = createSecret("public");
   const scriptApiKey = createSecret("script");
+  const congregationName = process.env.SEED_CONGREGATION_NAME ?? "Congregacao Inicial";
   const congregation = await prisma.congregation.upsert({
     where: { id: "seed-congregation" },
-    update: {},
+    update: {
+      name: congregationName,
+      sanitizedName: sanitizeSearchText(congregationName)
+    },
     create: {
       id: "seed-congregation",
-      name: process.env.SEED_CONGREGATION_NAME ?? "Congregacao Inicial"
+      name: congregationName,
+      sanitizedName: sanitizeSearchText(congregationName)
     }
   });
 
@@ -68,6 +115,8 @@ async function main() {
       }
     });
   }
+
+  await seedPublicSpeakThemes();
 
   console.log("Seed concluido.");
   console.log(`Token publico inicial: ${anonymousToken}`);

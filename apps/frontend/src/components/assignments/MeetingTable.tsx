@@ -17,16 +17,73 @@ import { MeetingActivityHistory } from "./MeetingActivityHistory";
 import { MinistryParticipationNotificationsButton } from "./MinistryParticipationNotificationsButton";
 import { ParticipationLinkButton } from "./ParticipationLinkButton";
 import { MeetingShareButton } from "./MeetingShareButton";
+import { MeetingStatusShareButton } from "./MeetingStatusShareButton";
+import { PublicSpeakThemeSelect } from "./PublicSpeakThemeSelect";
+import { PublicSpeakerSelect, type PublicTalkSpeakerValue } from "./PublicSpeakerSelect";
 
 type DraftAssignments = Record<string, string>;
 
-const notificationSectionKeys = new Set([
+type PublicTalkDraft = {
+  publicSpeakThemeId: string | null;
+  publicSpeakThemeLabel: string;
+  speaker: PublicTalkSpeakerValue;
+};
+
+const midweekNotificationSectionKeys = new Set([
   "midweekOpening",
   "treasures",
   "ministery",
   "christianLife",
   "midweekClosing",
 ]);
+
+const weekendNotificationSectionKeys = new Set([
+  "weekendOpening",
+  "publicTalk",
+  "watchtower",
+]);
+
+function findPublicTalkSlot(payload: AssignmentPayload) {
+  for (const section of payload.table.sections) {
+    for (const part of section.parts) {
+      if (part.partKey !== "public_talk") continue;
+      return { part, slot: part.slots[0] ?? null };
+    }
+  }
+  return { part: null, slot: null };
+}
+
+function publicTalkDraftFromPayload(
+  payload: AssignmentPayload,
+  participants: Participant[] = [],
+): PublicTalkDraft {
+  const { slot } = findPublicTalkSlot(payload);
+  if (!slot) {
+    return {
+      publicSpeakThemeId: null,
+      publicSpeakThemeLabel: "",
+      speaker: { participantId: null, publicSpeakerId: null, congregationName: "" },
+    };
+  }
+
+  const local = slot.participant
+    ? participants.find((participant) => participant.id === slot.participant?.id)
+    : undefined;
+
+  return {
+    publicSpeakThemeId: slot.publicSpeakTheme?.id ?? null,
+    publicSpeakThemeLabel: slot.publicSpeakTheme?.fullTitle ?? "",
+    speaker: {
+      participantId: slot.participant?.id ?? null,
+      publicSpeakerId: slot.publicSpeaker?.id ?? null,
+      congregationName:
+        slot.publicSpeaker?.congregation?.name ??
+        slot.participant?.congregation?.name ??
+        local?.congregation?.name ??
+        "",
+    },
+  };
+}
 
 export function MeetingTable({
   payload,
@@ -37,35 +94,39 @@ export function MeetingTable({
 }: {
   payload: AssignmentPayload;
   participants: Participant[];
-  onSave: (body: { assignments: Array<{ partKey: string; position: number; participantId: string | null }>; weekendFields?: Record<string, string | null> }) => Promise<void>;
+  onSave: (body: {
+    assignments: Array<{
+      partKey: string;
+      position: number;
+      participantId?: string | null;
+      publicSpeakerId?: string | null;
+      publicSpeakThemeId?: string | null;
+    }>;
+    weekendFields?: { initialSong?: string | null };
+  }) => Promise<void>;
   onBack?: () => void;
   className?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftAssignments, setDraftAssignments] = useState<DraftAssignments>({});
-  const [weekendFields, setWeekendFields] = useState({
-    initialSong: payload.meeting.initialSong ?? "",
-    publicTalkTheme: payload.meeting.publicTalkTheme ?? "",
-    publicSpeakerName: payload.meeting.publicSpeakerName ?? "",
-    publicSpeakerCongregation: payload.meeting.publicSpeakerCongregation ?? ""
-  });
+  const [initialSong, setInitialSong] = useState(payload.meeting.initialSong ?? "");
+  const [publicTalkDraft, setPublicTalkDraft] = useState<PublicTalkDraft>(() =>
+    publicTalkDraftFromPayload(payload, participants),
+  );
 
   useEffect(() => {
     const next: DraftAssignments = {};
     for (const section of payload.table.sections) {
       for (const part of section.parts) {
+        if (part.partKey === "public_talk") continue;
         for (const slot of part.slots) next[`${part.partKey}:${slot.position}`] = slot.participant?.id ?? "";
       }
     }
     setDraftAssignments(next);
-    setWeekendFields({
-      initialSong: payload.meeting.initialSong ?? "",
-      publicTalkTheme: payload.meeting.publicTalkTheme ?? "",
-      publicSpeakerName: payload.meeting.publicSpeakerName ?? "",
-      publicSpeakerCongregation: payload.meeting.publicSpeakerCongregation ?? ""
-    });
-  }, [payload]);
+    setInitialSong(payload.meeting.initialSong ?? "");
+    setPublicTalkDraft(publicTalkDraftFromPayload(payload, participants));
+  }, [payload, participants]);
 
   const title = payload.meeting.type === "midweek" ? "Reunião de Meio de Semana" : "Reunião de Fim de Semana";
   const participantOptions = useMemo(() => participants.filter((participant) => !participant.deletedAt), [participants]);
@@ -80,15 +141,36 @@ export function MeetingTable({
     [participantOptions],
   );
 
+  const publicTalkSlot = findPublicTalkSlot(payload);
+
   async function save() {
     setSaving(true);
     try {
+      const assignments: Array<{
+        partKey: string;
+        position: number;
+        participantId?: string | null;
+        publicSpeakerId?: string | null;
+        publicSpeakThemeId?: string | null;
+      }> = Object.entries(draftAssignments).map(([key, participantId]) => {
+        const [partKey, position] = key.split(":");
+        return { partKey, position: Number(position), participantId: participantId || null };
+      });
+
+      if (payload.meeting.type === "weekend" && publicTalkSlot.part && publicTalkSlot.slot) {
+        assignments.push({
+          partKey: publicTalkSlot.part.partKey,
+          position: publicTalkSlot.slot.position,
+          participantId: publicTalkDraft.speaker.participantId,
+          publicSpeakerId: publicTalkDraft.speaker.publicSpeakerId,
+          publicSpeakThemeId: publicTalkDraft.publicSpeakThemeId,
+        });
+      }
+
       await onSave({
-        assignments: Object.entries(draftAssignments).map(([key, participantId]) => {
-          const [partKey, position] = key.split(":");
-          return { partKey, position: Number(position), participantId: participantId || null };
-        }),
-        weekendFields: payload.meeting.type === "weekend" ? weekendFields : undefined
+        assignments,
+        weekendFields:
+          payload.meeting.type === "weekend" ? { initialSong: initialSong || null } : undefined,
       });
       setEditing(false);
     } finally {
@@ -123,6 +205,13 @@ export function MeetingTable({
           <div className="flex flex-wrap items-center gap-2 @max-[639px]/card-header:w-full">
             {payload.canSharePublicLink && (
               <MeetingShareButton
+                year={payload.meeting.year}
+                week={payload.meeting.week}
+                type={payload.meeting.type}
+              />
+            )}
+            {payload.canWrite && (
+              <MeetingStatusShareButton
                 year={payload.meeting.year}
                 week={payload.meeting.week}
                 type={payload.meeting.type}
@@ -174,11 +263,9 @@ export function MeetingTable({
         <div className="meeting-song">
           <Field
             label="Cântico inicial"
-            value={weekendFields.initialSong}
+            value={initialSong}
             editing={editing}
-            onChange={(value) =>
-              setWeekendFields((current) => ({ ...current, initialSong: value }))
-            }
+            onChange={setInitialSong}
           />
         </div>
       )}
@@ -194,11 +281,14 @@ export function MeetingTable({
                 <h2>{section.title}</h2>
                 {payload.canWrite &&
                   !editing &&
-                  payload.meeting.type === "midweek" &&
-                  notificationSectionKeys.has(section.sectionKey) && (
+                  ((payload.meeting.type === "midweek" &&
+                    midweekNotificationSectionKeys.has(section.sectionKey)) ||
+                    (payload.meeting.type === "weekend" &&
+                      weekendNotificationSectionKeys.has(section.sectionKey))) && (
                     <MinistryParticipationNotificationsButton
                       year={payload.meeting.year}
                       week={payload.meeting.week}
+                      meetingType={payload.meeting.type}
                       startAt={payload.meeting.startAt}
                       endAt={payload.meeting.endAt}
                       sectionKey={section.sectionKey}
@@ -211,7 +301,8 @@ export function MeetingTable({
                                   assignmentId: slot.assignmentId,
                                   participantName: slot.participant.name,
                                   partTitle: part.title,
-                                  slotLabel: slot.label,
+                                  slotLabel:
+                                    part.partKey === "public_talk" ? "Orador" : slot.label,
                                   hasWhatsapp: slot.participant.hasWhatsapp,
                                   responseStatus: slot.responseStatus,
                                   notificationStatus: slot.participationNotificationStatus,
@@ -225,9 +316,81 @@ export function MeetingTable({
               </div>
               {payload.meeting.type === "weekend" && section.sectionKey === "publicTalk" && (
                 <div className="weekend-fields">
-                  <Field label="Tema do discurso" value={weekendFields.publicTalkTheme} editing={editing} onChange={(value) => setWeekendFields((current) => ({ ...current, publicTalkTheme: value }))} />
-                  <Field label="Nome do orador" value={weekendFields.publicSpeakerName} editing={editing} onChange={(value) => setWeekendFields((current) => ({ ...current, publicSpeakerName: value }))} />
-                  <Field label="Congregação do orador" value={weekendFields.publicSpeakerCongregation} editing={editing} onChange={(value) => setWeekendFields((current) => ({ ...current, publicSpeakerCongregation: value }))} />
+                  {editing ? (
+                    <>
+                      <PublicSpeakThemeSelect
+                        value={publicTalkDraft.publicSpeakThemeId ?? ""}
+                        label={publicTalkDraft.publicSpeakThemeLabel}
+                        onValueChange={(themeId, theme) =>
+                          setPublicTalkDraft((current) => ({
+                            ...current,
+                            publicSpeakThemeId: themeId || null,
+                            publicSpeakThemeLabel: theme?.fullTitle ?? "",
+                          }))
+                        }
+                      />
+                      <PublicSpeakerSelect
+                        participants={participants}
+                        value={publicTalkDraft.speaker}
+                        speakerLabel={
+                          publicTalkDraft.speaker.participantId || publicTalkDraft.speaker.publicSpeakerId
+                            ? publicTalkSlot.slot?.participant?.name ??
+                              publicTalkSlot.slot?.publicSpeaker?.name ??
+                              ""
+                            : ""
+                        }
+                        onValueChange={(speaker) =>
+                          setPublicTalkDraft((current) => ({ ...current, speaker }))
+                        }
+                      />
+                      <label className="block space-y-1 text-sm">
+                        <span>Congregação do orador</span>
+                        <strong className="block min-h-8 rounded-lg border border-transparent px-0 py-1.5">
+                          {publicTalkDraft.speaker.congregationName || "Não informado"}
+                        </strong>
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <Field
+                        label="Tema do discurso"
+                        value={publicTalkSlot.slot?.publicSpeakTheme?.fullTitle ?? ""}
+                        editing={false}
+                        onChange={() => undefined}
+                      />
+                      <div className="space-y-1 text-sm">
+                        <span className="block text-muted-foreground">Nome do orador</span>
+                        <div className="flex flex-col items-start gap-1.5">
+                          <strong>
+                            {publicTalkSlot.slot?.participant?.name ??
+                              publicTalkSlot.slot?.publicSpeaker?.name ??
+                              "Nao informado"}
+                          </strong>
+                          {publicTalkSlot.slot?.participant && publicTalkSlot.slot.responseStatus && (
+                            <ResponseStatus status={publicTalkSlot.slot.responseStatus} />
+                          )}
+                          {payload.canWrite &&
+                            publicTalkSlot.slot?.assignmentId &&
+                            publicTalkSlot.slot.participant && (
+                              <ParticipationLinkButton
+                                assignmentId={publicTalkSlot.slot.assignmentId}
+                              />
+                            )}
+                        </div>
+                      </div>
+                      <Field
+                        label="Congregação do orador"
+                        value={
+                          publicTalkDraft.speaker.congregationName ||
+                          publicTalkSlot.slot?.publicSpeaker?.congregation?.name ||
+                          publicTalkSlot.slot?.participant?.congregation?.name ||
+                          ""
+                        }
+                        editing={false}
+                        onChange={() => undefined}
+                      />
+                    </>
+                  )}
                 </div>
               )}
               {!(payload.meeting.type === "weekend" && section.sectionKey === "publicTalk") && section.parts.map((part) => (

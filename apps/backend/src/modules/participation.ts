@@ -110,6 +110,10 @@ function assignmentPayload(assignment: ParticipationAssignment) {
 }
 
 async function participationPayload(anchor: ParticipationAssignment) {
+  if (!anchor.participant || !anchor.participantId) {
+    throw new Error("A designacao nao esta mais disponivel.");
+  }
+  const participant = anchor.participant;
   const anchorMeeting = anchor.meetingPartSlot.meetingPart.meetingSection.meeting;
   const week = anchorMeeting.meetingWeek;
   const meetingType = anchorMeeting.type === "weekend" ? "weekend" : "midweek";
@@ -145,8 +149,8 @@ async function participationPayload(anchor: ParticipationAssignment) {
 
   return {
     participant: {
-      id: anchor.participant.id,
-      name: anchor.participant.name
+      id: participant.id,
+      name: participant.name
     },
     meeting: {
       type: meetingType,
@@ -190,7 +194,7 @@ participationRouter.post("/participation/session", async (req, res) => {
     }
   });
 
-  if (!assignment) {
+  if (!assignment || !assignment.participantId) {
     return res.status(401).json({
       message: "Link de participacao invalido, expirado ou revogado."
     });
@@ -230,7 +234,7 @@ participationRouter.get("/participation/assignments", async (req, res) => {
     where: anchorWhere(claims),
     include: participationAssignmentInclude
   });
-  if (!anchor) {
+  if (!anchor || !anchor.participant || !anchor.participantId) {
     return res.status(409).json({ message: "A designacao nao esta mais disponivel." });
   }
 
@@ -283,7 +287,7 @@ participationRouter.post("/participation/response", async (req, res) => {
       },
       include: participationAssignmentInclude
     });
-    if (!current) return null;
+    if (!current || !current.participant) return null;
     if (current.responseStatus === input.status) return anchor.id;
 
     const updatedCount = await tx.assignment.updateMany({

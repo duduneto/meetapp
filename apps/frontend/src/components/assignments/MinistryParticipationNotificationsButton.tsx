@@ -74,6 +74,7 @@ function suggestedMeetingDate(startAt: string, endAt: string) {
 export function MinistryParticipationNotificationsButton({
   year,
   week,
+  meetingType = "midweek",
   startAt,
   endAt,
   sectionKey,
@@ -82,6 +83,7 @@ export function MinistryParticipationNotificationsButton({
 }: {
   year: number;
   week: number;
+  meetingType?: "midweek" | "weekend";
   startAt: string;
   endAt: string;
   sectionKey: string;
@@ -89,7 +91,9 @@ export function MinistryParticipationNotificationsButton({
   assignments: MinistryNotificationAssignment[];
 }) {
   const [open, setOpen] = useState(false);
-  const [meetingDate, setMeetingDate] = useState(() => suggestedMeetingDate(startAt, endAt));
+  const [meetingDate, setMeetingDate] = useState(() =>
+    meetingType === "weekend" ? dateOnly(endAt) : suggestedMeetingDate(startAt, endAt),
+  );
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<NotificationBatch | null>(null);
@@ -98,8 +102,10 @@ export function MinistryParticipationNotificationsButton({
   >({});
 
   useEffect(() => {
-    setMeetingDate(suggestedMeetingDate(startAt, endAt));
-  }, [endAt, startAt]);
+    setMeetingDate(
+      meetingType === "weekend" ? dateOnly(endAt) : suggestedMeetingDate(startAt, endAt),
+    );
+  }, [endAt, meetingType, startAt]);
 
   useEffect(() => {
     setNotificationStatuses(
@@ -127,7 +133,7 @@ export function MinistryParticipationNotificationsButton({
     setResult(null);
     try {
       const response = await api<NotificationBatch>(
-        `/assignments/${year}/${week}/midweek/sections/${encodeURIComponent(sectionKey)}/participation-notifications`,
+        `/assignments/${year}/${week}/${meetingType}/sections/${encodeURIComponent(sectionKey)}/participation-notifications`,
         {
           method: "POST",
           body: JSON.stringify({

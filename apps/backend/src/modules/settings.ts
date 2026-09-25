@@ -4,6 +4,7 @@ import { requireAdmin, requireAuth } from "../auth/middleware.js";
 import { generatePublicAccessCode } from "../auth/publicAccessCode.js";
 import { prisma } from "../lib/prisma.js";
 import { createSecret, hashSecret } from "../lib/secrets.js";
+import { sanitizeSearchText } from "../lib/textSanitize.js";
 
 export const settingsRouter = Router();
 
@@ -57,7 +58,10 @@ settingsRouter.get("/settings", requireAuth, requireAdmin, async (req, res) => {
 settingsRouter.put("/settings", requireAuth, requireAdmin, async (req, res) => {
   const input = settingsSchema.parse(req.body);
   const congregation = await prisma.$transaction(async (tx) => {
-    await tx.congregation.update({ where: { id: req.user!.congregationId }, data: { name: input.name } });
+    await tx.congregation.update({
+      where: { id: req.user!.congregationId },
+      data: { name: input.name, sanitizedName: sanitizeSearchText(input.name) }
+    });
     await tx.congregationSettings.update({
       where: { congregationId: req.user!.congregationId },
       data: {

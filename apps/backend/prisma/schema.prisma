@@ -20,16 +20,25 @@ enum ParticipationNotificationStatus {
 }
 
 model Congregation {
-  id           String                @id @default(cuid())
-  name         String
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
-  settings     CongregationSettings?
-  users        User[]
-  participants Participant[]
-  meetingWeeks MeetingWeek[]
-  auditLogs    AuditLog[]
-  publicAccessTokens PublicAccessToken[]
+  id                      String                @id @default(cuid())
+  name                    String
+  sanitizedName           String                @default("")
+  userId                  String?
+  deletedAt               DateTime?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  settings                CongregationSettings?
+  users                   User[]
+  participants            Participant[]
+  meetingWeeks            MeetingWeek[]
+  auditLogs               AuditLog[]
+  publicAccessTokens      PublicAccessToken[]
+  createdBy               User?                 @relation("CongregationCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+  homePublicSpeakers      PublicSpeaker[]       @relation("PublicSpeakerHomeCongregation")
+  hostedPublicSpeakers    PublicSpeaker[]       @relation("PublicSpeakerHostCongregation")
+
+  @@index([deletedAt])
+  @@index([sanitizedName])
 }
 
 model CongregationSettings {
@@ -48,19 +57,22 @@ model CongregationSettings {
 }
 
 model User {
-  id             String       @id @default(cuid())
-  congregationId String
-  firebaseUid    String?      @unique
-  email          String
-  name           String
-  role           String
-  active         Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  congregation   Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
-  auditLogs      AuditLog[]
-  createdPublicAccessTokens PublicAccessToken[] @relation("PublicAccessTokenCreatedBy")
-  participationNotifications ParticipationNotification[]
+  id                            String                       @id @default(cuid())
+  congregationId                String
+  firebaseUid                   String?                      @unique
+  email                         String
+  name                          String
+  role                          String
+  active                        Boolean                      @default(true)
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
+  congregation                  Congregation                 @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  auditLogs                     AuditLog[]
+  createdPublicAccessTokens     PublicAccessToken[]          @relation("PublicAccessTokenCreatedBy")
+  participationNotifications    ParticipationNotification[]
+  createdCongregations          Congregation[]               @relation("CongregationCreatedBy")
+  createdPublicSpeakThemes      PublicSpeakTheme[]           @relation("PublicSpeakThemeCreatedBy")
+  createdPublicSpeakers         PublicSpeaker[]              @relation("PublicSpeakerCreatedBy")
 
   @@unique([congregationId, email])
   @@index([email])
@@ -101,6 +113,47 @@ model Participant {
   auditLogs      AuditLog[]   @relation("ParticipantAuditLogs")
 
   @@index([congregationId, deletedAt])
+}
+
+model PublicSpeakTheme {
+  id                 String       @id @default(cuid())
+  number             Int
+  title              String
+  fullTitle          String
+  sanitizedFullTitle String
+  documentId         String?
+  path               String?
+  userId             String?
+  deletedAt          DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  createdBy          User?        @relation("PublicSpeakThemeCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+  assignments        Assignment[]
+
+  @@unique([number])
+  @@index([sanitizedFullTitle])
+  @@index([deletedAt])
+}
+
+model PublicSpeaker {
+  id                 String       @id @default(cuid())
+  name               String
+  sanitizedName      String
+  congregationId     String
+  hostCongregationId String
+  phone              String
+  whatsapp           String
+  userId             String?
+  deletedAt          DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  congregation       Congregation @relation("PublicSpeakerHomeCongregation", fields: [congregationId], references: [id])
+  hostCongregation   Congregation @relation("PublicSpeakerHostCongregation", fields: [hostCongregationId], references: [id], onDelete: Cascade)
+  createdBy          User?        @relation("PublicSpeakerCreatedBy", fields: [userId], references: [id], onDelete: SetNull)
+  assignments        Assignment[]
+
+  @@index([hostCongregationId, deletedAt])
+  @@index([sanitizedName])
 }
 
 model MeetingWeek {
@@ -187,19 +240,26 @@ model MeetingPartSlot {
 }
 
 model Assignment {
-  id                         String                   @id @default(cuid())
-  meetingPartSlotId          String                   @unique
-  participantId              String
-  responseStatus             AssignmentResponseStatus @default(PENDING)
-  respondedAt                DateTime?
-  participationTokenVersion  Int                      @default(0)
-  participationTokenIssuedAt DateTime?
-  participationAccessCodeHash String?                 @unique
-  createdAt                  DateTime                 @default(now())
-  updatedAt                  DateTime                 @updatedAt
-  meetingPartSlot            MeetingPartSlot          @relation(fields: [meetingPartSlotId], references: [id], onDelete: Cascade)
-  participant                Participant              @relation(fields: [participantId], references: [id])
-  participationNotifications ParticipationNotification[]
+  id                          String                   @id @default(cuid())
+  meetingPartSlotId           String                   @unique
+  participantId               String?
+  publicSpeakerId             String?
+  publicSpeakThemeId          String?
+  responseStatus              AssignmentResponseStatus @default(PENDING)
+  respondedAt                 DateTime?
+  participationTokenVersion   Int                      @default(0)
+  participationTokenIssuedAt  DateTime?
+  participationAccessCodeHash String?                  @unique
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @updatedAt
+  meetingPartSlot             MeetingPartSlot          @relation(fields: [meetingPartSlotId], references: [id], onDelete: Cascade)
+  participant                 Participant?             @relation(fields: [participantId], references: [id])
+  publicSpeaker               PublicSpeaker?           @relation(fields: [publicSpeakerId], references: [id])
+  publicSpeakTheme            PublicSpeakTheme?        @relation(fields: [publicSpeakThemeId], references: [id])
+  participationNotifications  ParticipationNotification[]
+
+  @@index([publicSpeakerId])
+  @@index([publicSpeakThemeId])
 }
 
 model ParticipationNotification {

@@ -12,8 +12,34 @@ import {
   publicAssignmentsLinkFromCode
 } from "../lib/publicLinks.js";
 import { prisma } from "../lib/prisma.js";
+import { createMeetingStatusShareMessage } from "../lib/meetingStatusShare.js";
+import { ensurePublicTalkSlot } from "./meetingStructures.js";
 
 export const assignmentsRouter = Router();
+
+const MALE_GENDERS = new Set(["Masculino", "M", "masculino", "m", "male"]);
+
+function isMaleGender(gender: string | null | undefined) {
+  return Boolean(gender && MALE_GENDERS.has(gender));
+}
+
+const assignmentInclude = {
+  participant: {
+    include: {
+      congregation: { select: { id: true, name: true } }
+    }
+  },
+  publicSpeaker: {
+    include: {
+      congregation: { select: { id: true, name: true, deletedAt: true } }
+    }
+  },
+  publicSpeakTheme: true,
+  participationNotifications: {
+    orderBy: { createdAt: "desc" as const },
+    take: 1
+  }
+};
 
 const participantSuggestionsQuerySchema = z.object({
   role: z.enum(["publisher", "assistant"]).default("publisher"),
@@ -55,6 +81,19 @@ export async function buildAssignmentPayload(
   canWrite: boolean,
   canSharePublicLink = false
 ) {
+  if (type === "weekend") {
+    const weekendMeeting = await prisma.meeting.findFirst({
+      where: {
+        type: "weekend",
+        meetingWeek: { congregationId, year, yearWeek: week }
+      },
+      select: { id: true }
+    });
+    if (weekendMeeting) {
+      await ensurePublicTalkSlot(prisma, weekendMeeting.id);
+    }
+  }
+
   const meetingWeek = await prisma.meetingWeek.findFirst({
     where: { congregationId, year, yearWeek: week },
     include: {
@@ -71,13 +110,7 @@ export async function buildAssignmentPayload(
                     orderBy: { position: "asc" },
                     include: {
                       assignment: {
-                        include: {
-                          participant: true,
-                          participationNotifications: {
-                            orderBy: { createdAt: "desc" },
-                            take: 1
-                          }
-                        }
+                        include: assignmentInclude
                       }
                     }
                   }
@@ -103,10 +136,7 @@ export async function buildAssignmentPayload(
       startAt: meetingWeek.startAt,
       endAt: meetingWeek.endAt,
       bibleReading: meetingWeek.bibleReading,
-      initialSong: meeting.initialSong,
-      publicTalkTheme: meeting.publicTalkTheme,
-      publicSpeakerName: meeting.publicSpeakerName,
-      publicSpeakerCongregation: meeting.publicSpeakerCongregation
+      initialSong: meeting.initialSong
     },
     table: {
       ...(songs ? { songs } : {}),
@@ -139,7 +169,35 @@ export async function buildAssignmentPayload(
                     id: slot.assignment.participant.id,
                     name: slot.assignment.participant.name,
                     deletedAt: slot.assignment.participant.deletedAt,
-                    hasWhatsapp: Boolean(slot.assignment.participant.whatsapp?.trim())
+                    hasWhatsapp: Boolean(slot.assignment.participant.whatsapp?.trim()),
+                    congregationId: slot.assignment.participant.congregationId,
+                    congregation: slot.assignment.participant.congregation
+                      ? {
+                          id: slot.assignment.participant.congregation.id,
+                          name: slot.assignment.participant.congregation.name
+                        }
+                      : null
+                  }
+                : null,
+              publicSpeaker: slot.assignment?.publicSpeaker
+                ? {
+                    id: slot.assignment.publicSpeaker.id,
+                    name: slot.assignment.publicSpeaker.name,
+                    phone: slot.assignment.publicSpeaker.phone,
+                    congregation: slot.assignment.publicSpeaker.congregation
+                      ? {
+                          id: slot.assignment.publicSpeaker.congregation.id,
+                          name: slot.assignment.publicSpeaker.congregation.name
+                        }
+                      : null
+                  }
+                : null,
+              publicSpeakTheme: slot.assignment?.publicSpeakTheme
+                ? {
+                    id: slot.assignment.publicSpeakTheme.id,
+                    number: slot.assignment.publicSpeakTheme.number,
+                    title: slot.assignment.publicSpeakTheme.title,
+                    fullTitle: slot.assignment.publicSpeakTheme.fullTitle
                   }
                 : null
             };
@@ -481,7 +539,7 @@ assignmentsRouter.post(
           previousValue: String(assignment.participationTokenVersion),
           newValue: String(updated.participationTokenVersion),
           context: {
-            participantName: assignment.participant.name,
+            participantName: assignment.participant?.name ?? "Sem designação",
             sectionTitle: section.title,
             partTitle: part.title,
             slotLabel: assignment.meetingPartSlot.label
@@ -630,22 +688,130 @@ assignmentsRouter.get("/assignments/:year/:week/:type", requireAuth, async (req,
   res.json(payload);
 });
 
+assignmentsRouter.post(
+  "/assignments/:year/:week/:type/status-share",
+  requireAuth,
+  requireWrite,
+  async (req, res) => {
+    const route = z
+      .object({
+        year: z.coerce.number().int(),
+        week: z.coerce.number().int(),
+        type: z.enum(["midweek", "weekend"])
+      })
+      .parse(req.params);
+
+    if (route.type === "weekend") {
+      const weekendMeeting = await prisma.meeting.findFirst({
+        where: {
+          type: "weekend",
+          meetingWeek: {
+            congregationId: req.user!.congregationId,
+            year: route.year,
+            yearWeek: route.week
+          }
+        },
+        select: { id: true }
+      });
+      if (weekendMeeting) {
+        await ensurePublicTalkSlot(prisma, weekendMeeting.id);
+      }
+    }
+
+    const meetingWeek = await prisma.meetingWeek.findFirst({
+      where: {
+        congregationId: req.user!.congregationId,
+        year: route.year,
+        yearWeek: route.week
+      },
+      include: {
+        congregation: { include: { settings: true } },
+        meetings: {
+          where: { type: route.type },
+          include: {
+            sections: {
+              orderBy: { order: "asc" },
+              include: {
+                parts: {
+                  orderBy: { order: "asc" },
+                  include: {
+                    slots: {
+                      orderBy: { position: "asc" },
+                      include: {
+                        assignment: {
+                          include: {
+                            participant: { select: { name: true } },
+                            publicSpeaker: {
+                              include: {
+                                congregation: { select: { name: true } }
+                              }
+                            },
+                            publicSpeakTheme: { select: { fullTitle: true } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const meeting = meetingWeek?.meetings[0];
+    if (!meetingWeek || !meeting) {
+      return res.status(404).json({ message: "Reuniao nao encontrada." });
+    }
+
+    const songs =
+      route.type === "midweek" ? songsFromRawPayload(meetingWeek.rawSourcePayload) : undefined;
+    const timezone = meetingWeek.congregation.settings?.timezone ?? "America/Fortaleza";
+    const message = createMeetingStatusShareMessage({
+      meetingType: route.type,
+      meetingDate: meeting.meetingDate ?? meetingWeek.endAt,
+      timezone,
+      initialSong: meeting.initialSong,
+      songs: songs ?? null,
+      sections: meeting.sections.map((section) => ({
+        sectionKey: section.sectionKey,
+        title: section.title,
+        parts: section.parts.map((part) => ({
+          partKey: part.partKey,
+          title: part.title,
+          slots: part.slots.map((slot) => ({
+            label: slot.label,
+            responseStatus: slot.assignment?.responseStatus ?? null,
+            participantName: slot.assignment?.participant?.name ?? null,
+            publicSpeakerName: slot.assignment?.publicSpeaker?.name ?? null,
+            publicSpeakerCongregation:
+              slot.assignment?.publicSpeaker?.congregation?.name ?? null,
+            themeTitle: slot.assignment?.publicSpeakTheme?.fullTitle ?? null
+          }))
+        }))
+      }))
+    });
+
+    res.json({ message });
+  }
+);
+
 const saveAssignmentsSchema = z.object({
   assignments: z
     .array(
       z.object({
         partKey: z.string(),
         position: z.number(),
-        participantId: z.string().nullable().optional()
+        participantId: z.string().nullable().optional(),
+        publicSpeakerId: z.string().nullable().optional(),
+        publicSpeakThemeId: z.string().nullable().optional()
       })
     )
     .default([]),
   weekendFields: z
     .object({
-      initialSong: z.string().nullable().optional(),
-      publicTalkTheme: z.string().nullable().optional(),
-      publicSpeakerName: z.string().nullable().optional(),
-      publicSpeakerCongregation: z.string().nullable().optional()
+      initialSong: z.string().nullable().optional()
     })
     .optional()
 });
@@ -656,6 +822,19 @@ assignmentsRouter.put("/assignments/:year/:week/:type", requireAuth, requireWrit
   const week = Number(req.params.week);
   const type = req.params.type;
   await prisma.$transaction(async (tx) => {
+    if (type === "weekend") {
+      const weekendMeeting = await tx.meeting.findFirst({
+        where: {
+          type: "weekend",
+          meetingWeek: { congregationId: req.user!.congregationId, year, yearWeek: week }
+        },
+        select: { id: true }
+      });
+      if (weekendMeeting) {
+        await ensurePublicTalkSlot(tx, weekendMeeting.id);
+      }
+    }
+
     const meetingWeek = await tx.meetingWeek.findFirstOrThrow({
       where: { congregationId: req.user!.congregationId, year, yearWeek: week },
       include: {
@@ -669,7 +848,11 @@ assignmentsRouter.put("/assignments/:year/:week/:type", requireAuth, requireWrit
                     slots: {
                       include: {
                         assignment: {
-                          include: { participant: { select: { name: true } } }
+                          include: {
+                            participant: { select: { name: true } },
+                            publicSpeaker: { select: { name: true } },
+                            publicSpeakTheme: { select: { fullTitle: true } }
+                          }
                         }
                       }
                     }
@@ -684,35 +867,26 @@ assignmentsRouter.put("/assignments/:year/:week/:type", requireAuth, requireWrit
     const meeting = meetingWeek.meetings[0];
     if (!meeting) throw new Error("Reuniao nao encontrada.");
 
-    if (type === "weekend" && input.weekendFields) {
-      for (const field of [
-        "initialSong",
-        "publicTalkTheme",
-        "publicSpeakerName",
-        "publicSpeakerCongregation"
-      ] as const) {
-        if (field in input.weekendFields) {
-          const previousValue = meeting[field] ?? null;
-          const newValue = input.weekendFields[field] ?? null;
-          if (previousValue !== newValue) {
-            await tx.meeting.update({ where: { id: meeting.id }, data: { [field]: newValue } });
-            await tx.auditLog.create({
-              data: {
-                congregationId: req.user!.congregationId,
-                meetingId: meeting.id,
-                changedByUserId: req.user!.id,
-                actorType: "USER",
-                action: "MEETING_FIELD_UPDATED",
-                entityType: "Meeting",
-                entityId: meeting.id,
-                field,
-                previousValue,
-                newValue,
-                context: { meetingType: meeting.type }
-              }
-            });
+    if (type === "weekend" && input.weekendFields && "initialSong" in input.weekendFields) {
+      const previousValue = meeting.initialSong ?? null;
+      const newValue = input.weekendFields.initialSong ?? null;
+      if (previousValue !== newValue) {
+        await tx.meeting.update({ where: { id: meeting.id }, data: { initialSong: newValue } });
+        await tx.auditLog.create({
+          data: {
+            congregationId: req.user!.congregationId,
+            meetingId: meeting.id,
+            changedByUserId: req.user!.id,
+            actorType: "USER",
+            action: "MEETING_FIELD_UPDATED",
+            entityType: "Meeting",
+            entityId: meeting.id,
+            field: "initialSong",
+            previousValue,
+            newValue,
+            context: { meetingType: meeting.type }
           }
-        }
+        });
       }
     }
 
@@ -727,34 +901,107 @@ assignmentsRouter.put("/assignments/:year/:week/:type", requireAuth, requireWrit
     for (const change of input.assignments) {
       const found = slots.get(`${change.partKey}:${change.position}`);
       if (!found) continue;
+
+      const isPublicTalk = found.part.partKey === "public_talk";
       const currentParticipantId = found.slot.assignment?.participantId ?? null;
-      const currentParticipantName = found.slot.assignment?.participant.name ?? "Sem designação";
-      const nextParticipantId = change.participantId ?? null;
-      if (currentParticipantId === nextParticipantId) continue;
+      const currentPublicSpeakerId = found.slot.assignment?.publicSpeakerId ?? null;
+      const currentThemeId = found.slot.assignment?.publicSpeakThemeId ?? null;
+      const currentParticipantName =
+        found.slot.assignment?.participant?.name ??
+        found.slot.assignment?.publicSpeaker?.name ??
+        "Sem designação";
+
+      let nextParticipantId =
+        change.participantId !== undefined ? change.participantId : currentParticipantId;
+      let nextPublicSpeakerId =
+        change.publicSpeakerId !== undefined ? change.publicSpeakerId : currentPublicSpeakerId;
+      let nextThemeId =
+        change.publicSpeakThemeId !== undefined ? change.publicSpeakThemeId : currentThemeId;
+
+      if (!isPublicTalk) {
+        nextPublicSpeakerId = null;
+        nextThemeId = null;
+        if (change.participantId === undefined) {
+          nextParticipantId = currentParticipantId;
+        } else {
+          nextParticipantId = change.participantId;
+        }
+      }
+
+      if (nextParticipantId && nextPublicSpeakerId) {
+        throw new Error("Use participante local OU orador visitante, nao ambos.");
+      }
+
+      if (
+        currentParticipantId === nextParticipantId &&
+        currentPublicSpeakerId === nextPublicSpeakerId &&
+        currentThemeId === nextThemeId
+      ) {
+        continue;
+      }
 
       let assignmentId = found.slot.assignment?.id ?? found.slot.id;
       let nextParticipantName = "Sem designação";
-      if (nextParticipantId) {
-        const participant = await tx.participant.findFirst({
-          where: { id: nextParticipantId, congregationId: req.user!.congregationId, deletedAt: null }
-        });
-        if (!participant) throw new Error("Participante invalido.");
-        nextParticipantName = participant.name;
+
+      if (!nextParticipantId && !nextPublicSpeakerId && !nextThemeId) {
+        if (found.slot.assignment) {
+          await tx.assignment.delete({ where: { meetingPartSlotId: found.slot.id } });
+        }
+      } else {
+        if (nextParticipantId) {
+          const participant = await tx.participant.findFirst({
+            where: {
+              id: nextParticipantId,
+              congregationId: req.user!.congregationId,
+              deletedAt: null
+            }
+          });
+          if (!participant) throw new Error("Participante invalido.");
+          if (isPublicTalk && !isMaleGender(participant.gender)) {
+            throw new Error("O discurso publico exige um participante do sexo masculino.");
+          }
+          nextParticipantName = participant.name;
+        }
+
+        if (nextPublicSpeakerId) {
+          const speaker = await tx.publicSpeaker.findFirst({
+            where: {
+              id: nextPublicSpeakerId,
+              hostCongregationId: req.user!.congregationId,
+              deletedAt: null
+            }
+          });
+          if (!speaker) throw new Error("Orador visitante invalido.");
+          nextParticipantName = speaker.name;
+        }
+
+        if (nextThemeId) {
+          const theme = await tx.publicSpeakTheme.findFirst({
+            where: { id: nextThemeId, deletedAt: null }
+          });
+          if (!theme) throw new Error("Tema invalido.");
+        }
+
         const assignment = await tx.assignment.upsert({
           where: { meetingPartSlotId: found.slot.id },
           update: {
             participantId: nextParticipantId,
+            publicSpeakerId: nextPublicSpeakerId,
+            publicSpeakThemeId: nextThemeId,
             responseStatus: "PENDING",
             respondedAt: null,
             participationTokenVersion: { increment: 1 },
             participationTokenIssuedAt: null,
             participationAccessCodeHash: null
           },
-          create: { meetingPartSlotId: found.slot.id, participantId: nextParticipantId }
+          create: {
+            meetingPartSlotId: found.slot.id,
+            participantId: nextParticipantId,
+            publicSpeakerId: nextPublicSpeakerId,
+            publicSpeakThemeId: nextThemeId
+          }
         });
         assignmentId = assignment.id;
-      } else if (found.slot.assignment) {
-        await tx.assignment.delete({ where: { meetingPartSlotId: found.slot.id } });
       }
 
       await tx.auditLog.create({
@@ -764,16 +1011,18 @@ assignmentsRouter.put("/assignments/:year/:week/:type", requireAuth, requireWrit
           changedByUserId: req.user!.id,
           actorType: "USER",
           action:
-            currentParticipantId === null
+            currentParticipantId === null &&
+            currentPublicSpeakerId === null &&
+            currentThemeId === null
               ? "ASSIGNMENT_CREATED"
-              : nextParticipantId === null
+              : !nextParticipantId && !nextPublicSpeakerId && !nextThemeId
                 ? "ASSIGNMENT_REMOVED"
                 : "ASSIGNMENT_REASSIGNED",
           entityType: "Assignment",
           entityId: assignmentId,
-          field: "participantId",
-          previousValue: currentParticipantId,
-          newValue: nextParticipantId,
+          field: isPublicTalk ? "publicTalkAssignment" : "participantId",
+          previousValue: currentParticipantId ?? currentPublicSpeakerId,
+          newValue: nextParticipantId ?? nextPublicSpeakerId,
           context: {
             sectionKey: found.section.sectionKey,
             sectionTitle: found.section.title,
@@ -782,7 +1031,11 @@ assignmentsRouter.put("/assignments/:year/:week/:type", requireAuth, requireWrit
             slotPosition: found.slot.position,
             slotLabel: found.slot.label,
             previousParticipantName: currentParticipantName,
-            newParticipantName: nextParticipantName
+            newParticipantName: nextParticipantName,
+            previousPublicSpeakThemeId: currentThemeId,
+            newPublicSpeakThemeId: nextThemeId,
+            previousPublicSpeakerId: currentPublicSpeakerId,
+            newPublicSpeakerId: nextPublicSpeakerId
           }
         }
       });
