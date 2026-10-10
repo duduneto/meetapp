@@ -113,11 +113,19 @@ Deve imprimir `<html>...` e sair com 0. Erros de DBus/UPower no stderr são ruí
 
 ```bash
 cd /root/zap && npm ci && npm run check
-pm2 start src/index.js --name zap-api --cwd /root/zap --time
+pm2 start /root/zap/ecosystem.config.js
 pm2 save
 ```
 
-O `--cwd` é obrigatório: `dotenv` lê o `.env` do diretório de trabalho, e o `LocalAuth` grava `.wwebjs_auth` lá também. Sem ele, a sessão vai para o lugar errado e o QR é pedido a cada restart.
+Suba **sempre pelo `ecosystem.config.js`**, nunca por `pm2 start src/index.js` avulso: é ele que carrega `cron_restart` e `max_memory_restart`, as duas defesas contra a degradação do Chrome (armadilha nº 7). Um start avulso sobe a API funcionando e silenciosamente sem proteção.
+
+O `cwd` definido ali é obrigatório: `dotenv` lê o `.env` do diretório de trabalho, e o `LocalAuth` grava `.wwebjs_auth` lá também. Sem ele, a sessão vai para o lugar errado e o QR é pedido a cada restart.
+
+Para conferir se as defesas estão mesmo valendo (o `pm2 describe` não mostra todas):
+
+```bash
+pm2 jlist | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const e=JSON.parse(s).find(x=>x.name==="zap-api").pm2_env;console.log("cron:",e.cron_restart,"| maxmem:",e.max_memory_restart)})'
+```
 
 ### 6. Autenticar o WhatsApp
 
@@ -202,6 +210,21 @@ A correção é a mesma nos dois casos (escanear o QR de novo), mas a conclusão
 **5. Arquivos `._*` e uid 501:staff** vindos do `tar` do macOS. Ver passo 2.
 
 **6. Edite o código no repo local primeiro.** Como não há Git, uma correção feita direto no servidor some no próximo deploy. O fluxo correto é editar `~/Dev/varjota/zap/src/index.js`, validar com `node --check`, e só então transferir.
+
+**7. O Chrome degrada depois de dias no ar — e derruba a máquina inteira.** Este é o incidente mais caro até agora. O cliente subiu em 24/09/2026 e rodou cinco dias seguidos; em 27/09 a máquina saturou de verdade (`user+sys ≈ 85%` por mais de 5 horas, com `steal` baixo — consumo real, não throttling), e a Hostinger aplicou limite automático de 20% de CPU. Um simples restart devolveu o conjunto Chrome+zap a **1,4% das 2 vCPUs**.
+
+Sintomas que acompanham: `ProtocolError: Runtime.callFunctionOn timed out` em `getNumberId`, e o backend registrando `Gateway do WhatsApp excedeu o timeout de 180000ms`.
+
+As defesas vivem no `ecosystem.config.js`: `cron_restart: '0 7 * * *'` (04:00 BRT — **o servidor roda em UTC**, confira com `timedatectl` antes de mudar) e `max_memory_restart: '800M'`.
+
+**Como diagnosticar sem se enganar:** `ps`/`top` reportam `%CPU` como média acumulada desde o início do processo, o que faz um Chrome recém-iniciado parecer estar a 84%. Meça o delta real e consulte o histórico, que separa consumo verdadeiro de throttling:
+
+```bash
+sar -u                                  # hoje, 10 em 10 min
+for f in /var/log/sysstat/sa[0-9]*; do sar -u -f "$f" | grep Average; done
+```
+
+`%user` alto com `%steal` baixo é saturação real. `%user` baixo com `%steal` alto (60–75%) é o limite da Hostinger em ação — aí a causa já passou, e o que resta é pedir a remoção do limite (permitida uma vez a cada 7 dias).
 
 ## Escopo de rede — invariante a preservar
 
