@@ -1,6 +1,7 @@
 import "dotenv/config";
 import cors from "cors";
 import express from "express";
+import { ZodError } from "zod";
 import { requireAuth, permissionsFor } from "./auth/middleware.js";
 import { assignmentsRouter } from "./modules/assignments.js";
 import { congregationsRouter } from "./modules/congregations.js";
@@ -43,7 +44,15 @@ app.use(usersRouter);
 app.use(settingsRouter);
 app.use(reportsRouter);
 
-app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((error: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (error instanceof ZodError) {
+    console.warn("validation_error", {
+      method: req.method,
+      path: req.path,
+      issues: error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message }))
+    });
+    return res.status(400).json({ message: error.issues[0]?.message ?? "Dados invalidos." });
+  }
   console.error(error);
   const message = error instanceof Error ? error.message : "Erro inesperado.";
   res.status(message.includes("not found") || message.includes("nao encontrada") ? 404 : 400).json({ message });

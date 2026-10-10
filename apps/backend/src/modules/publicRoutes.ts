@@ -56,7 +56,17 @@ async function congregationFromPublicToken(token?: string) {
 }
 
 publicRouter.post("/public/session", async (req, res) => {
-  const { code } = publicSessionSchema.parse(req.body);
+  const parsed = publicSessionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const received = typeof req.body?.code === "string" ? req.body.code : null;
+    console.warn("public_session_invalid_code", {
+      received: received?.slice(0, 64) ?? null,
+      length: received?.length ?? null,
+      referer: req.get("referer") ?? null
+    });
+    return res.status(400).json({ message: "Codigo de acesso publico invalido." });
+  }
+  const { code } = parsed.data;
   const publicToken = await prisma.publicAccessToken.findFirst({
     where: {
       accessCode: code,
